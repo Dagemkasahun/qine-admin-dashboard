@@ -8,7 +8,7 @@ import {
   Loader2, Minus
 } from 'lucide-react';
 import { apiClient } from '../../api/client';
-
+import { merchantApi } from '../../api/merchants.ts';
 const ProductManagement = () => {
   const { merchantId, businessModel, setBusinessModel } = useOutletContext();
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
