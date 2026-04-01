@@ -7,7 +7,7 @@ import {
   X, Save, Image as ImageIcon, Camera, 
   Loader2, Minus
 } from 'lucide-react';
-import { merchantApi } from '../../api/merchants';
+import { apiClient } from '../../api/client';
 
 const ProductManagement = () => {
   const { merchantId, businessModel, setBusinessModel } = useOutletContext();
@@ -43,8 +43,8 @@ const ProductManagement = () => {
 
   const fetchCategories = async () => {
     try {
-      const response = await fetch(`http://localhost:5001/api/merchants/${merchantId}/categories`);
-      const data = await response.json();
+      const response = await apiClient.get(`/merchants/${merchantId}/products`);
+       const data = response.data;
       setCategories(data);
     } catch (error) {
       console.error('Error fetching categories:', error);
