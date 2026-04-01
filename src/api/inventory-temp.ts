@@ -1,5 +1,6 @@
 // src/api/inventory.ts
-import { apiClient } from './client.js';
+//import { apiClient } from './client.js';
+import apiClient from './client';
 
 export interface InventoryItem {
   id: string;
@@ -43,3 +44,6 @@ export const inventoryApi = {
     return response.data;
   },
 };
+
+
+export default apiinventory;
