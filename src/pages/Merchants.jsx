@@ -6,8 +6,8 @@ import {
   MapPin, Plus, Phone, Mail
 } from 'lucide-react';
 
-// Use the production API URL
-const API_URL = 'https://qine-backend.onrender.com/api';
+// Use relative path so requests go through Netlify's proxy redirect
+const API_URL = '/api';
 
 const Merchants = () => {
   const [merchants, setMerchants] = useState([]);

@@ -19,17 +19,8 @@ export const NotificationProvider = ({ children }) => {
   const [socket, setSocket] = useState(null);
 
   useEffect(() => {
-    // Get the WebSocket URL from environment variable or use production URL
-    const getSocketUrl = () => {
-      // In production, use the Render backend URL
-      if (import.meta.env.PROD) {
-        return 'https://qine-backend.onrender.com';
-      }
-      // In development, use localhost
-      return 'http://localhost:5001';
-    };
-
-    const SOCKET_URL = getSocketUrl();
+    // WebSocket needs a direct connection (can't go through Netlify proxy)
+    const SOCKET_URL = import.meta.env.VITE_WS_URL || 'https://qine-backend.onrender.com';
     console.log('🔌 Connecting to WebSocket at:', SOCKET_URL);
 
     // Connect to WebSocket server

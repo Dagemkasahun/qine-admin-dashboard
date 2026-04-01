@@ -1,7 +1,7 @@
 // src/config/api.js
 const API_CONFIG = {
   // Change this one line when you need to update the port
-  BASE_URL: 'http://localhost:5001',
+  BASE_URL: '',
   
   // API endpoints
   endpoints: {

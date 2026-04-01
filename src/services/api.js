@@ -1,5 +1,6 @@
 // src/services/api.js
-const API_BASE_URL = 'http://localhost:5001/api';
+// Use relative path so requests go through Netlify's proxy redirect
+const API_BASE_URL = '/api';
 
 // Helper function to handle responses
 const handleResponse = async (response) => {
