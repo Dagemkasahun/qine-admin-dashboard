@@ -1,0 +1,843 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+
+// ============================================
+// USER MANAGEMENT - WITH ALL RELATIONS
+// ============================================
+
+model User {
+  id           String  @id @default(uuid())
+  email        String  @unique
+  phone        String  @unique
+  password     String
+  firstName    String
+  lastName     String
+  profileImage String?
+  role         String  @default("CUSTOMER") // SUPER_ADMIN, ADMIN, MERCHANT, CUSTOMER, RIDER, SUPPORT
+  status       String  @default("ACTIVE") // ACTIVE, INACTIVE, SUSPENDED, PENDING_VERIFICATION
+
+  // Verification
+  emailVerified Boolean   @default(false)
+  phoneVerified Boolean   @default(false)
+  verifiedAt    DateTime?
+
+  // Security
+  lastLogin     DateTime?
+  loginAttempts Int       @default(0)
+  lockedUntil   DateTime?
+  refreshToken  String?
+
+  // Profile
+  dateOfBirth DateTime?
+  gender      String?
+  nationality String?
+
+  // Preferences
+  language             String  @default("en")
+  currency             String  @default("ETB")
+  timezone             String  @default("Africa/Addis_Ababa")
+  notificationSettings String?
+
+  // ALL RELATIONS - These were missing
+  addresses          Address[]
+  merchant           Merchant?
+  riderProfile       RiderProfile?
+  customerOrders     Order[]             @relation("CustomerOrders") // For orders placed by this user as customer
+  riderOrders        Order[]             @relation("RiderOrders") // For orders delivered by this user as rider
+  wallet             Wallet?
+  reviews            Review[]
+  reviewResponses    ReviewResponse[]
+  notifications      Notification[]
+  notificationTokens NotificationToken[]
+  activityLogs       ActivityLog[]
+
+  // Timestamps
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([email])
+  @@index([phone])
+  @@index([role])
+  @@index([status])
+}
+
+model Address {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  addressType String // HOME, WORK, OTHER
+  isDefault   Boolean @default(false)
+
+  recipientName  String
+  recipientPhone String
+
+  addressLine1 String
+  addressLine2 String?
+  city         String
+  subCity      String?
+  woreda       String?
+  houseNumber  String?
+
+  latitude  Float?
+  longitude Float?
+
+  instructions String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+// ============================================
+// MERCHANT MANAGEMENT
+// ============================================
+
+model Merchant {
+  id      String @id @default(uuid())
+  ownerId String @unique
+  owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  // Basic Info
+  businessName String
+  businessType String // PRODUCT, SERVICE, RESTAURANT, PROMOTION
+  category     String
+  subCategory  String?
+  description  String?
+
+  // Media
+  logo       String?
+  coverImage String?
+  gallery    String? // JSON array stored as string
+
+  // Contact
+  businessPhone String
+  businessEmail String
+  website       String?
+  socialMedia   String? // JSON object stored as string
+
+  // Location
+  address       String
+  city          String
+  subCity       String?
+  latitude      Float?
+  longitude     Float?
+  serviceRadius Int?
+
+  // Business Details
+  licenseNumber   String?
+  tinNumber       String?
+  yearEstablished Int?
+  businessHours   String? // JSON stored as string
+
+  // Status
+  status          String    @default("PENDING") // PENDING, APPROVED, REJECTED, SUSPENDED, ACTIVE, INACTIVE
+  approvedBy      String?
+  approvedAt      DateTime?
+  rejectionReason String?
+
+  // Performance
+  rating        Float @default(0)
+  totalReviews  Int   @default(0)
+  totalOrders   Int   @default(0)
+  totalRevenue  Float @default(0)
+  avgOrderValue Float @default(0)
+
+  // Financial
+  commission    Float?
+  paymentMethod String?
+  bankAccount   String? // JSON stored as string
+
+  // Features
+  configuration String? // JSON stored as string
+  modules       String? // JSON array stored as string
+
+  // Delivery Settings
+  deliveryConfig String? // JSON stored as string
+
+  // Relationships
+  products   Product[]
+  categories ProductCategory[]
+  orders     Order[]
+  reviews    Review[]
+  promotions Promotion[]
+  inventory  InventoryItem[]
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ownerId])
+  @@index([businessType])
+  @@index([status])
+  @@index([city])
+  @@index([rating])
+}
+
+model ProductCategory {
+  id         String   @id @default(uuid())
+  merchantId String
+  merchant   Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  name        String
+  description String?
+  image       String?
+  sortOrder   Int     @default(0)
+  isActive    Boolean @default(true)
+
+  products Product[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([merchantId, name])
+  @@index([merchantId])
+}
+
+model Product {
+  id         String           @id @default(uuid())
+  merchantId String
+  merchant   Merchant         @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  categoryId String?
+  category   ProductCategory? @relation(fields: [categoryId], references: [id])
+
+  // Basic Info
+  name        String
+  description String?
+  shortDesc   String?
+
+  // Pricing
+  price     Float
+  compareAt Float?
+  cost      Float?
+
+  // Inventory
+  sku        String? @unique
+  barcode    String?
+  stock      Int     @default(0)
+  lowStock   Int     @default(5)
+  trackStock Boolean @default(true)
+
+  // Media
+  images String? // JSON array stored as string
+  video  String?
+
+  // Variants
+  hasVariants Boolean @default(false)
+  variants    String? // JSON stored as string
+
+  // Digital
+  isDigital   Boolean @default(false)
+  digitalFile String?
+
+  // Status
+  isActive   Boolean @default(true)
+  isFeatured Boolean @default(false)
+
+  // SEO
+  metaTitle String?
+  metaDesc  String?
+  slug      String? @unique
+
+  // Stats
+  totalSold Int @default(0)
+  views     Int @default(0)
+
+  // Tax & Shipping
+  taxable    Boolean @default(true)
+  taxRate    Float?
+  weight     Float?
+  dimensions String? // JSON stored as string
+
+  // Relationships
+  orderItems OrderItem[]
+  inventory  InventoryItem[]
+  reviews    Review[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([merchantId])
+  @@index([categoryId])
+  @@index([sku])
+  @@index([isActive])
+}
+
+// ============================================
+// INVENTORY MANAGEMENT
+// ============================================
+
+model InventoryItem {
+  id         String   @id @default(uuid())
+  merchantId String
+  merchant   Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  quantity  Int
+  reserved  Int @default(0)
+  available Int @default(0)
+
+  location   String?
+  batch      String?
+  expiryDate DateTime?
+
+  lastCounted DateTime?
+  lastUpdated DateTime  @updatedAt
+
+  movements InventoryMovement[]
+
+  @@unique([merchantId, productId])
+  @@index([productId])
+  @@index([expiryDate])
+}
+
+model InventoryMovement {
+  id              String        @id @default(uuid())
+  inventoryItemId String
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Cascade)
+
+  type          String // IN, OUT, ADJUSTMENT, RETURN
+  quantity      Int
+  previousStock Int
+  newStock      Int
+
+  reason    String? // SALE, RESTOCK, DAMAGE, RETURN, COUNT
+  reference String? // Order ID, Purchase Order ID, etc.
+  notes     String?
+
+  createdBy String?
+  createdAt DateTime @default(now())
+
+  @@index([inventoryItemId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+// ============================================
+// ORDER MANAGEMENT - WITH ALL RELATIONS
+// ============================================
+
+model Order {
+  id          String @id @default(uuid())
+  orderNumber String @unique
+
+  // Customer
+  customerId String
+  customer   User   @relation("CustomerOrders", fields: [customerId], references: [id])
+
+  // Merchant
+  merchantId String
+  merchant   Merchant @relation(fields: [merchantId], references: [id])
+
+  // Rider
+  riderId String?
+  rider   User?   @relation("RiderOrders", fields: [riderId], references: [id])
+
+  // Order Details
+  status      String @default("PENDING") // PENDING, CONFIRMED, PREPARING, READY, ASSIGNED, PICKED_UP, IN_TRANSIT, DELIVERED, CANCELLED, REFUNDED
+  items       String // JSON stored as string
+  subtotal    Float
+  discount    Float  @default(0)
+  deliveryFee Float  @default(0)
+  serviceFee  Float  @default(0)
+  tax         Float  @default(0)
+  total       Float
+
+  // Payment
+  paymentMethod String    @default("CASH") // CASH, CARD, MOBILE_MONEY, BANK_TRANSFER, WALLET
+  paymentStatus String    @default("PENDING") // PENDING, PAID, FAILED, REFUNDED, PARTIALLY_REFUNDED
+  paymentId     String?
+  paidAt        DateTime?
+
+  // Delivery
+  deliveryType    String  @default("STANDARD") // STANDARD, EXPRESS, SCHEDULED
+  deliveryAddress String // JSON stored as string
+  deliveryLat     Float?
+  deliveryLng     Float?
+  deliveryNotes   String?
+
+  // Timeline
+  confirmedAt  DateTime?
+  preparedAt   DateTime?
+  readyAt      DateTime?
+  assignedAt   DateTime?
+  pickedUpAt   DateTime?
+  deliveredAt  DateTime?
+  cancelledAt  DateTime?
+  cancelledBy  String?
+  cancelReason String?
+
+  // Tracking
+  estimatedDelivery DateTime?
+  actualDelivery    DateTime?
+
+  // Customer
+  customerNotes  String?
+  customerRating Int?
+  customerReview String?
+
+  // Merchant
+  merchantNotes String?
+
+  // Relationships
+  orderItems    OrderItem[]
+  statusHistory OrderStatusHistory[]
+  payments      Payment[]
+
+  // Timestamps
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  RiderProfile   RiderProfile? @relation(fields: [riderProfileId], references: [id])
+  riderProfileId String?
+  Review         Review[]
+
+  @@index([orderNumber])
+  @@index([customerId])
+  @@index([merchantId])
+  @@index([riderId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model OrderItem {
+  id      String @id @default(uuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id])
+
+  name     String // Snapshot of product name
+  sku      String?
+  price    Float // Price at time of order
+  quantity Int
+  subtotal Float
+  discount Float   @default(0)
+  total    Float
+
+  variant String? // JSON stored as string
+  notes   String?
+
+  createdAt DateTime @default(now())
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+model OrderStatusHistory {
+  id      String @id @default(uuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  status    String
+  notes     String?
+  changedBy String?
+
+  createdAt DateTime @default(now())
+
+  @@index([orderId])
+  @@index([createdAt])
+}
+
+// ============================================
+// PAYMENT MANAGEMENT
+// ============================================
+
+model Payment {
+  id      String @id @default(uuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  amount Float
+  method String // CASH, CARD, MOBILE_MONEY, BANK_TRANSFER, WALLET
+  status String @default("PENDING") // PENDING, PAID, FAILED, REFUNDED
+
+  // Gateway Details
+  gateway       String?
+  transactionId String? @unique
+  reference     String?
+
+  // Customer Details
+  customerId    String?
+  customerEmail String?
+  customerPhone String?
+
+  // Meta
+  metadata String? // JSON stored as string
+
+  // Timeline
+  paidAt     DateTime?
+  refundedAt DateTime?
+  failedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orderId])
+  @@index([transactionId])
+  @@index([status])
+}
+
+model Wallet {
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  balance  Float  @default(0)
+  currency String @default("ETB")
+
+  // Limits
+  dailyLimit   Float?
+  monthlyLimit Float?
+
+  // Status
+  isActive    Boolean   @default(true)
+  lockedUntil DateTime?
+
+  transactions WalletTransaction[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model WalletTransaction {
+  id       String @id @default(uuid())
+  walletId String
+  wallet   Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  type    String // DEPOSIT, WITHDRAWAL, PAYMENT, REFUND
+  amount  Float
+  balance Float // Balance after transaction
+
+  reference   String? // Order ID, Payment ID, etc.
+  description String?
+
+  status String @default("COMPLETED")
+
+  metadata String? // JSON stored as string
+
+  createdAt DateTime @default(now())
+
+  @@index([walletId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+// ============================================
+// DELIVERY MANAGEMENT
+// ============================================
+
+model RiderProfile {
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Personal
+  fullName       String
+  phone          String
+  alternatePhone String?
+
+  // Vehicle
+  vehicleType  String // MOTORCYCLE, BICYCLE, CAR, WALK
+  vehicleModel String?
+  vehiclePlate String?
+
+  // Documents
+  licenseNumber String?
+  licenseImage  String?
+  idCardImage   String?
+
+  // Verification
+  verified   Boolean   @default(false)
+  verifiedBy String?
+  verifiedAt DateTime?
+
+  // Location
+  currentLat         Float?
+  currentLng         Float?
+  lastLocationUpdate DateTime?
+
+  // Status
+  status       String // ONLINE, OFFLINE, BUSY, ON_DELIVERY
+  availability String? // JSON stored as string
+
+  // Performance
+  totalDeliveries Int   @default(0)
+  rating          Float @default(0)
+  completedRate   Float @default(0)
+  onTimeRate      Float @default(0)
+
+  // Earnings
+  totalEarnings  Float @default(0)
+  currentBalance Float @default(0)
+
+  // Relationships
+  reviews    Review[]
+  deliveries Order[] // This relation is now properly matched with Order.rider
+  // Note: The opposite relation is Order.rider (already defined)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([currentLat, currentLng])
+}
+
+// ============================================
+// REVIEWS & RATINGS - WITH ALL RELATIONS
+// ============================================
+
+model Review {
+  id String @id @default(uuid())
+
+  // Review for what?
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id])
+
+  merchantId String?
+  merchant   Merchant? @relation(fields: [merchantId], references: [id])
+
+  riderId String?
+  rider   RiderProfile? @relation(fields: [riderId], references: [id])
+
+  // Review by whom
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  // Order reference
+  orderId String?
+  order   Order?  @relation(fields: [orderId], references: [id])
+
+  // Review content
+  rating  Int // 1-5
+  title   String?
+  content String?
+
+  // Media
+  images String? // JSON array stored as string
+
+  // Status
+  isVerified  Boolean @default(false)
+  isPublished Boolean @default(true)
+
+  // Response
+  response ReviewResponse?
+
+  // Stats
+  helpful    Int @default(0)
+  notHelpful Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId])
+  @@index([merchantId])
+  @@index([riderId])
+  @@index([userId])
+  @@index([rating])
+}
+
+model ReviewResponse {
+  id       String @id @default(uuid())
+  reviewId String @unique
+  review   Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  content String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ============================================
+// PROMOTIONS & DISCOUNTS
+// ============================================
+
+model Promotion {
+  id         String    @id @default(uuid())
+  merchantId String?
+  merchant   Merchant? @relation(fields: [merchantId], references: [id])
+
+  name        String
+  description String?
+
+  type        String // PERCENTAGE, FIXED, BUY_X_GET_Y
+  value       Float
+  minOrder    Float?
+  maxDiscount Float?
+
+  // Applicability
+  applicableTo String // ALL, SPECIFIC_PRODUCTS, CATEGORY
+  productIds   String? // JSON array stored as string
+  categoryIds  String? // JSON array stored as string
+
+  // Dates
+  startDate DateTime
+  endDate   DateTime
+
+  // Usage
+  usageLimit   Int?
+  usedCount    Int  @default(0)
+  perUserLimit Int? @default(1)
+
+  // Status
+  isActive Boolean @default(true)
+
+  // Coupon
+  code String? @unique // If it's a coupon
+
+  // Meta
+  image String?
+  terms String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([merchantId])
+  @@index([code])
+  @@index([isActive])
+  @@index([startDate, endDate])
+}
+
+// ============================================
+// NOTIFICATIONS
+// ============================================
+
+model Notification {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  type     String // ORDER, PROMOTION, SYSTEM, ALERT, REMINDER, UPDATE
+  priority String @default("MEDIUM") // LOW, MEDIUM, HIGH, URGENT
+
+  title String
+  body  String
+  data  String? // JSON stored as string
+
+  // Status
+  isRead Boolean   @default(false)
+  readAt DateTime?
+
+  // Action
+  actionUrl  String?
+  actionText String?
+
+  // Image
+  image String?
+
+  // Expiry
+  expiresAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+  @@index([type])
+}
+
+model NotificationToken {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  token      String
+  deviceType String // WEB, IOS, ANDROID
+  deviceId   String?
+
+  isActive Boolean @default(true)
+
+  lastUsed  DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([userId, token])
+  @@index([userId])
+  @@index([token])
+}
+
+// ============================================
+// ACTIVITY LOGS
+// ============================================
+
+model ActivityLog {
+  id     String  @id @default(uuid())
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id])
+
+  action   String
+  entity   String? // User, Order, Product, etc.
+  entityId String?
+
+  details   String? // JSON stored as string
+  ipAddress String?
+  userAgent String?
+
+  status String? // SUCCESS, FAILED, PENDING
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([entity, entityId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+// ============================================
+// SYSTEM SETTINGS
+// ============================================
+
+model SystemSetting {
+  id    String @id @default(uuid())
+  key   String @unique
+  value String // JSON stored as string
+  type  String // STRING, NUMBER, BOOLEAN, JSON
+
+  description String?
+  category    String
+
+  isPublic   Boolean @default(false)
+  isEditable Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([key])
+  @@index([category])
+}
+
+model AuditLog {
+  id     String  @id @default(uuid())
+  userId String?
+
+  action    String
+  tableName String
+  recordId  String
+
+  oldValue String? // JSON stored as string
+  newValue String? // JSON stored as string
+
+  ipAddress String?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([tableName, recordId])
+  @@index([createdAt])
+}

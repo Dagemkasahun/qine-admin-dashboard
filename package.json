@@ -1,0 +1,89 @@
+{
+  "name": "qine-admin-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "QINE Super App - Admin Dashboard & Backend API",
+  "author": "Dagem Kasahun",
+  "license": "UNLICENSED",
+  "main": "server.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "start": "node server.js",
+    "server": "node server.js",
+    "dev:all": "concurrently \"npm run server\" \"npm run dev\"",
+    "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio",
+    "db:seed": "node prisma/seed.js",
+    "db:reset": "node -e \"const fs = require('fs'); const path = './prisma/dev.db'; if (fs.existsSync(path)) fs.unlinkSync(path);\" && npm run db:push && npm run db:seed",
+    "db:migrate": "prisma migrate dev",
+    "clean": "rm -rf node_modules package-lock.json dist",
+    "clean:all": "rm -rf node_modules package-lock.json dist prisma/dev.db",
+    "reinstall": "npm run clean && npm install",
+    "postinstall": "prisma generate"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.js"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "axios": "^1.13.6",
+    "bcryptjs": "^3.0.3",
+    "cloudinary": "^2.6.0",
+    "cors": "^2.8.6",
+    "date-fns": "^4.1.0",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "lucide-react": "^0.263.1",
+    "react": "^18.2.0",
+    "react-datepicker": "^4.25.0",
+    "react-dom": "^18.2.0",
+    "react-hot-toast": "^2.6.0",
+    "react-router-dom": "^6.8.0",
+    "recharts": "^2.15.4",
+    "render": "^0.1.4",
+    "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.3"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "@types/react": "^18.2.15",
+    "@types/react-dom": "^18.2.7",
+    "@vitejs/plugin-react": "^4.0.3",
+    "autoprefixer": "^10.4.14",
+    "concurrently": "^9.2.1",
+    "eslint": "^8.45.0",
+    "eslint-plugin-react": "^7.32.2",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "eslint-plugin-react-refresh": "^0.4.3",
+    "postcss": "^8.4.27",
+    "prisma": "^5.22.0",
+    "tailwindcss": "^3.3.3",
+    "vite": "^7.3.1"
+  },
+  "engines": {
+    "node": "20.x",
+    "npm": "10.x"
+  },
+  "keywords": [
+    "qine",
+    "super-app",
+    "admin-dashboard",
+    "react",
+    "express",
+    "prisma",
+    "postgresql"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Dagemkasahun/qine.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Dagemkasahun/qine/issues"
+  },
+  "homepage": "https://github.com/Dagemkasahun/qine#readme"
+}
