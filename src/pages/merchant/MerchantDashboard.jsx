@@ -4,12 +4,12 @@ import { useOutletContext } from 'react-router-dom';
 import { 
   Store, Package, ShoppingBag, Users, 
   TrendingUp, Clock, MapPin, CheckCircle,
-  Settings, Bell, Search, ChevronRight, DollarSign
+  ChevronRight
 } from 'lucide-react';
-import { merchantApi } from '../../api/merchants';
+import apiClient from '../../api/client';   // ✅ use client.ts
 
 const MerchantDashboard = () => {
-  const { merchantId, businessModel, setBusinessModel } = useOutletContext();
+  const { merchantId, businessModel } = useOutletContext();
   const [stats, setStats] = useState({
     totalRevenue: 0,
     activeOrders: 0,
@@ -27,7 +27,9 @@ const MerchantDashboard = () => {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      const data = await merchantApi.getStats(merchantId);
+      const response = await apiClient.get(`/merchants/${merchantId}/stats`);
+      const data = response.data;
+
       setStats({
         totalRevenue: data.totalRevenue || 0,
         activeOrders: data.activeOrders || 0,

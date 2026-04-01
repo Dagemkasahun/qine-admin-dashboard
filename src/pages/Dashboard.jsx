@@ -14,6 +14,9 @@ import {
 import { useNotifications } from '../context/NotificationContext';
 import { ThemeContext } from '../context/ThemeContext';
 
+const API_URL = 'https://qine-backend.onrender.com/api';
+const response = await fetch(`${API_URL}/merchants`);
+
 const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({});
