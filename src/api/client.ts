@@ -1,9 +1,21 @@
 // src/api/client.ts
 import axios from 'axios';
 
-// HARDCODED PRODUCTION URL - DO NOT CHANGE
-const API_URL = 'https://qine-backend.onrender.com/api';
+// Get API URL from environment variable or use default
+const getApiUrl = () => {
+  // Check for Vite environment variable first
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+  // Fallback for production
+  if (import.meta.env.PROD) {
+    return 'https://qine-backend.onrender.com/api';
+  }
+  // Development fallback
+  return 'http://localhost:5001/api';
+};
 
+const API_URL = getApiUrl();
 console.log('🔵 API URL:', API_URL);
 
 export const apiClient = axios.create({
@@ -38,5 +50,3 @@ apiClient.interceptors.response.use(
     return Promise.reject(error);
   }
 );
-
-export default apiClient;

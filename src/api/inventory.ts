@@ -1,5 +1,5 @@
 // src/api/inventory.ts
-import { apiClient } from './client';
+import { apiClient } from './client.js';
 
 export interface InventoryItem {
   id: string;
