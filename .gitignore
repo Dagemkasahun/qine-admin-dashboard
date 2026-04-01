@@ -1,4 +1,5 @@
 node_modules/
 dist/
-.env*
-*.backup
+*.txt
+package1.json
+qine-admin-dashboard/
