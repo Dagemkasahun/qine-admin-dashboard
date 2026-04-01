@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 
 // ✅ FIXED IMPORT (adjust extension based on your file)
-import apiClient from '../../api/client.ts';
+import apiClient from '../../api/client';
 
 const MerchantDashboard = () => {
   const { merchantId, businessModel } = useOutletContext();
