@@ -19,8 +19,8 @@ export const NotificationProvider = ({ children }) => {
   const [socket, setSocket] = useState(null);
 
   useEffect(() => {
-    // HARDCODED PRODUCTION WEBSOCKET URL
-    const SOCKET_URL = 'https://qine-backend.onrender.com';
+    // WebSocket needs a direct connection (can't go through Netlify proxy)
+    const SOCKET_URL = import.meta.env.VITE_WS_URL || 'https://qine-backend.onrender.com';
     console.log('🔌 Connecting to WebSocket at:', SOCKET_URL);
 
     const newSocket = io(SOCKET_URL, {

@@ -11,7 +11,7 @@ export const NotificationProvider = ({ children }) => {
 
   useEffect(() => {
     // Correct place for the connection
-    const newSocket = io('http://localhost:5001', {
+    const newSocket = io(import.meta.env.VITE_WS_URL || 'https://qine-backend.onrender.com', {
       transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: 5,

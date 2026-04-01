@@ -1,22 +1,9 @@
 // src/api/client.ts
 import axios from 'axios';
 
-// Get API URL from environment variable or use default
-const getApiUrl = () => {
-  // Check for Vite environment variable first
-  if (import.meta.env.VITE_API_URL) {
-    return import.meta.env.VITE_API_URL;
-  }
-  // Fallback for production
-  if (import.meta.env.PROD) {
-    return 'https://qine-backend.onrender.com/api';
-  }
-  // Development fallback
-  return 'http://localhost:5001/api';
-};
-
-const API_URL = getApiUrl();
-console.log('🔵 API URL:', API_URL);
+// Use relative path so requests go through Netlify's proxy redirect,
+// which avoids CORS issues. In development, Vite/Netlify Dev will also proxy.
+const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 export const apiClient = axios.create({
   baseURL: API_URL,
