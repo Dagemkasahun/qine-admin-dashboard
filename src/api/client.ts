@@ -1,4 +1,3 @@
-// src/api/client.ts
 import axios from 'axios';
 
 // Get API URL from environment variable or use default
@@ -18,7 +17,7 @@ const getApiUrl = () => {
 const API_URL = getApiUrl();
 console.log('🔵 API URL:', API_URL);
 
-export const apiClient = axios.create({
+const apiClient = axios.create({
   baseURL: API_URL,
   timeout: 30000,
   headers: {

@@ -2,6 +2,7 @@
 //import { apiClient } from './client.js';
 import apiClient from './client';
 
+
 export interface InventoryItem {
   id: string;
   productId: string;
@@ -46,4 +47,4 @@ export const inventoryApi = {
 };
 
 
-export default apiinventory;
+export default inventoryApi;
