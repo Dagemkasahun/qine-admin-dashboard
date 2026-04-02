@@ -1,5 +1,4 @@
-// src/api/merchants.ts
-import { apiClient } from './client.js';
+import apiClient from './client';
 
 export interface Merchant {
   id: string;
