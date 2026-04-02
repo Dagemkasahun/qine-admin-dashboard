@@ -9,7 +9,8 @@ import {
 
 // ✅ FIXED IMPORT (adjust extension based on your file)
 import apiClient from '@/api/client.ts';
-import merchantApi from '@/api/merchants.ts';
+//import merchantApi from '@/api/merchants.ts';
+import { merchantApi } from '../../api/merchants';
 
 const MerchantDashboard = () => {
   const { merchantId, businessModel } = useOutletContext();
