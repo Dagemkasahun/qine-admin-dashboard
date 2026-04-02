@@ -9,21 +9,22 @@ import { Server } from 'socket.io';
 import http from 'http';
 import bcrypt from 'bcryptjs';
 
-const express = require('express');
+//const express = require('express');
 const prisma = new PrismaClient();
 const app = express();
 const PORT = process.env.PORT || 5001;
 
 app.use(cors({
   origin: [
-    'http://localhost:5173',
-    'http://localhost:5174',
-    'https://qine-admin.vercel.app',
-    'https://qine-backend.onrender.com',
-    'https://qine-admin-dashboard.vercel.app' 
-	'https://qine-admin-dashboard.onrender.com' 
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'https://qine-admin.vercel.app',
+  'https://qine-backend.onrender.com',
+  'https://qine-admin-dashboard.vercel.app',
+  'https://qine-admin-dashboard.onrender.com'
   ],
-  credentials: true
+  methods: ["GET", "POST"],
+    credentials: true
 }));
 
 app.use(express.json({ limit: '50mb' }));
