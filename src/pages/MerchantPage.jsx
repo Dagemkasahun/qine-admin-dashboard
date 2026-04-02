@@ -16,7 +16,7 @@ import {
 // import { merchantApi } from '../services/merchant';
 
 // Option 2: If merchant.ts is in src/api/
-import { merchantApi } from '../api/merchant';
+import { merchantApi } from '@/api/merchants';
 
 // Option 3: If merchant.ts is in src/utils/
 // import { merchantApi } from '../utils/merchant';
