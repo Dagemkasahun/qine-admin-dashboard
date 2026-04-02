@@ -60,28 +60,31 @@ const ProductManagement = () => {
   const topSeller = products.reduce((prev, current) => (prev.totalSold > current.totalSold) ? prev : current, products[0]);
 
   const handleAddProduct = async (productData) => {
-    try {
-      const newProduct = await merchantApi.createProduct(merchantId, {
-        name: productData.name,
-        description: productData.description,
-        shortDesc: productData.description?.substring(0, 100),
-        price: parseFloat(productData.price),
-        stock: parseInt(productData.stock),
-        sku: productData.sku || null,
-        images: productData.image ? JSON.stringify([productData.image]) : null,
-        categoryId: productData.categoryId || null,
-        isActive: true,
-        weight: productData.weight ? parseFloat(productData.weight) : null,
-      });
-      
-      setProducts([...products, newProduct]);
-      setIsProductModalOpen(false);
-      alert(`✅ Product "${productData.name}" added successfully!`);
-    } catch (error) {
-      console.error('Error adding product:', error);
-      alert('❌ Error adding product: ' + (error.response?.data?.message || error.message));
-    }
-  };
+  try {
+    // Use the correct endpoint format that matches your backend
+    const response = await apiClient.post('/api/products', {
+      merchantId: merchantId,
+      name: productData.name,
+      description: productData.description,
+      shortDesc: productData.description?.substring(0, 100),
+      price: parseFloat(productData.price),
+      stock: parseInt(productData.stock),
+      sku: productData.sku || null,
+      images: productData.image ? JSON.stringify([productData.image]) : null,
+      categoryId: productData.categoryId || null,
+      isActive: true,
+      weight: productData.weight ? parseFloat(productData.weight) : null,
+    });
+    
+    const newProduct = response.data;
+    setProducts([...products, newProduct]);
+    setIsProductModalOpen(false);
+    alert(`✅ Product "${productData.name}" added successfully!`);
+  } catch (error) {
+    console.error('Error adding product:', error);
+    alert('❌ Error adding product: ' + (error.response?.data?.message || error.message));
+  }
+};
 
   const handleUpdateProduct = async (productData) => {
     try {
