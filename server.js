@@ -35,7 +35,12 @@ const server = http.createServer(app);
 // Initialize WebSocket server
 const io = new Server(server, {
   cors: {
-    origin: ["http://localhost:5173", "http://localhost:8081"],
+    origin: [
+	
+	 "http://localhost:5173",
+      "http://localhost:8081",
+      "https://qine-admin-dashboard.onrender.com",
+  "https://qine-admin-dashboard.vercel.app"],
     methods: ["GET", "POST"],
     credentials: true
   }
