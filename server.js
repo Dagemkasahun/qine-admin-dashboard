@@ -457,10 +457,15 @@ app.post('/api/products', async (req, res) => {
   try {
     const product = await prisma.product.create({
       data: {
-        ...req.body,
-        images: req.body.images || null,
-        variants: req.body.variants || null,
-        dimensions: req.body.dimensions || null
+               merchantId: req.body.merchantId,
+        name: req.body.name,
+        description: req.body.description,
+        price: req.body.price,
+        stock: req.body.stock,
+        sku: req.body.sku,
+        images: req.body.images,
+        categoryId: req.body.categoryId,
+        isActive: true,
       }
     });
     
