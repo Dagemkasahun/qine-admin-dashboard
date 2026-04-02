@@ -41,15 +41,17 @@ const ProductManagement = () => {
     }
   };
 
-  const fetchCategories = async () => {
-    try {
-      const response = await apiClient.get(`/merchants/${merchantId}/products`);
-       const data = response.data;
-      setCategories(data);
-    } catch (error) {
-      console.error('Error fetching categories:', error);
-    }
-  };
+ const fetchCategories = async () => {
+  try {
+    // Use the correct categories endpoint, not products
+    const response = await apiClient.get(`/merchants/${merchantId}/categories`);
+    const data = response.data;
+    setCategories(data);
+    console.log('Categories loaded:', data);
+  } catch (error) {
+    console.error('Error fetching categories:', error);
+  }
+};
 
   // Calculate stats from real products
   const lowStockProducts = products.filter(p => p.stock <= 5);
