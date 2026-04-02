@@ -1,4 +1,3 @@
-// src/api/client.ts
 import axios from 'axios';
 
 const getApiUrl = () => {
@@ -12,7 +11,6 @@ const getApiUrl = () => {
 };
 
 const API_URL = getApiUrl();
-console.log('🔵 API URL:', API_URL);
 
 const apiClient = axios.create({
   baseURL: API_URL,
