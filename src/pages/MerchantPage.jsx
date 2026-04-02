@@ -5,31 +5,8 @@ import {
   Store, Plus, Settings, Camera, X, Save, 
   Image as ImageIcon, Home, Bell, CheckCircle,
   MapPin, Package, Info, ShoppingBag, BarChart3,
-  Users, LogOut, Menu, XCircle, ArrowLeft, Upload,
-  Search, Clock  // Added missing imports
+  Users, LogOut, Menu, XCircle, ArrowLeft, Upload
 } from 'lucide-react';
-
-// Try different possible paths for the merchant API
-// Uncomment the one that works for your project structure:
-
-// Option 1: If merchant.ts is in src/services/
-// import { merchantApi } from '../services/merchant';
-
-// Option 2: If merchant.ts is in src/api/
-import { merchantApi } from '@/api/merchants';
-
-// Option 3: If merchant.ts is in src/utils/
-// import { merchantApi } from '../utils/merchant';
-
-// For now, let's create a mock API to make the build work
-const merchantApi = {
-  updateProfile: async (merchantId, data) => {
-    console.log('Mock API call - updateProfile:', { merchantId, data });
-    // Simulate API delay
-    await new Promise(resolve => setTimeout(resolve, 500));
-    return { id: merchantId, ...data };
-  }
-};
 
 const MerchantPage = () => {
   const { merchantId } = useParams();
@@ -67,30 +44,30 @@ const MerchantPage = () => {
   ];
 
   // --- HANDLERS ---
-  const handleProfileUpdate = async (updatedData) => {
-    try {
-      // Call the API to update merchant profile
-      const response = await merchantApi.updateProfile(merchantId, {
-        businessName: updatedData.name,
-        description: updatedData.description,
-        address: updatedData.location,
-        city: updatedData.city || 'Addis Ababa',
-        businessPhone: updatedData.phone,
-        businessEmail: updatedData.email,
-        logo: updatedData.logo,
-        coverImage: updatedData.coverImage,
-        configuration: updatedData.configuration
-      });
-      
-      // Update local state
-      setBusinessModel(prev => ({ ...prev, ...updatedData }));
-      setIsProfileModalOpen(false);
-      alert('✅ Profile updated successfully!');
-    } catch (error) {
-      console.error('Error updating profile:', error);
-      alert('❌ Error updating profile: ' + (error.response?.data?.message || error.message));
-    }
-  };
+ const handleProfileUpdate = async (updatedData) => {
+  try {
+    // Call the API to update merchant profile
+    const response = await merchantApi.updateProfile(merchantId, {
+      businessName: updatedData.name,
+      description: updatedData.description,
+      address: updatedData.location,
+      city: updatedData.city || 'Addis Ababa',
+      businessPhone: updatedData.phone,
+      businessEmail: updatedData.email,
+      logo: updatedData.logo,
+      coverImage: updatedData.coverImage,
+      configuration: updatedData.configuration
+    });
+    
+    // Update local state
+    setBusinessModel(prev => ({ ...prev, ...updatedData }));
+    setIsProfileModalOpen(false);
+    alert('✅ Profile updated successfully!');
+  } catch (error) {
+    console.error('Error updating profile:', error);
+    alert('❌ Error updating profile: ' + (error.response?.data?.message || error.message));
+  }
+};
 
   const handleExitMerchant = () => {
     navigate('/merchants');
@@ -173,7 +150,7 @@ const MerchantPage = () => {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 lg:py-8">
-        {/* --- BUSINESS HEADER CARD --- */}
+        {/* --- BUSINESS HEADER CARD (UPDATED - Clean, No Duplicate) --- */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 mb-6 overflow-hidden">
           {/* Cover Image Area */}
           <div className="h-32 sm:h-40 bg-gradient-to-r from-blue-50 to-indigo-50 relative group">
@@ -344,7 +321,10 @@ const MerchantPage = () => {
   );
 };
 
-// Profile Modal Component
+// Import missing icons
+import { Search, Clock } from 'lucide-react';
+
+// Profile Modal Component (same as before)
 const ProfileModal = ({ businessModel, onClose, onSave }) => {
   const [formData, setFormData] = useState({
     name: businessModel.name,
