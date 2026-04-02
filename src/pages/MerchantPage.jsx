@@ -44,10 +44,30 @@ const MerchantPage = () => {
   ];
 
   // --- HANDLERS ---
-  const handleProfileUpdate = (updatedData) => {
+ const handleProfileUpdate = async (updatedData) => {
+  try {
+    // Call the API to update merchant profile
+    const response = await merchantApi.updateProfile(merchantId, {
+      businessName: updatedData.name,
+      description: updatedData.description,
+      address: updatedData.location,
+      city: updatedData.city || 'Addis Ababa',
+      businessPhone: updatedData.phone,
+      businessEmail: updatedData.email,
+      logo: updatedData.logo,
+      coverImage: updatedData.coverImage,
+      configuration: updatedData.configuration
+    });
+    
+    // Update local state
     setBusinessModel(prev => ({ ...prev, ...updatedData }));
     setIsProfileModalOpen(false);
-  };
+    alert('✅ Profile updated successfully!');
+  } catch (error) {
+    console.error('Error updating profile:', error);
+    alert('❌ Error updating profile: ' + (error.response?.data?.message || error.message));
+  }
+};
 
   const handleExitMerchant = () => {
     navigate('/merchants');

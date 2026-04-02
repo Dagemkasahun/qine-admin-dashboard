@@ -76,10 +76,11 @@ export const merchantApi = {
   },
 
   // Update merchant profile
-  updateProfile: async (merchantId: string, data: Partial<Merchant>): Promise<Merchant> => {
-    const response = await apiClient.put(`/merchants/${merchantId}`, data);
-    return response.data;
-  },
+	updateProfile: async (merchantId: string, data: Partial<Merchant>): Promise<Merchant> => {
+	  const response = await apiClient.put(`/merchants/${merchantId}`, data);
+	  return response.data;
+	},
+
 
   // Get products
   getProducts: async (merchantId: string): Promise<Product[]> => {
