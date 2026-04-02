@@ -20,7 +20,8 @@ app.use(cors({
     'http://localhost:5174',
     'https://qine-admin.vercel.app',
     'https://qine-backend.onrender.com',
-    'https://qine-admin-dashboard.vercel.app' // <-- Add this line!
+    'https://qine-admin-dashboard.vercel.app' 
+	'https://qine-admin-dashboard.onrender.com' 
   ],
   credentials: true
 }));
