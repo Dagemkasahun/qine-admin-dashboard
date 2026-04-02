@@ -1,7 +1,7 @@
 // server.js - Add at the very top
 import dotenv from 'dotenv';
 dotenv.config();
-// server.js
+
 import express from 'express';
 import cors from 'cors';
 import { PrismaClient } from '@prisma/client';
@@ -9,22 +9,21 @@ import { Server } from 'socket.io';
 import http from 'http';
 import bcrypt from 'bcryptjs';
 
-//const express = require('express');
 const prisma = new PrismaClient();
 const app = express();
 const PORT = process.env.PORT || 5001;
 
 app.use(cors({
   origin: [
-  'http://localhost:5173',
-  'http://localhost:5174',
-  'https://qine-admin.vercel.app',
-  'https://qine-backend.onrender.com',
-  'https://qine-admin-dashboard.vercel.app',
-  'https://qine-admin-dashboard.onrender.com'
+    'http://localhost:5173',
+    'http://localhost:5174',
+    'https://qine-admin.vercel.app',
+    'https://qine-backend.onrender.com',
+    'https://qine-admin-dashboard.vercel.app',
+    'https://qine-admin-dashboard.onrender.com'
   ],
   methods: ["GET", "POST"],
-    credentials: true
+  credentials: true
 }));
 
 app.use(express.json({ limit: '50mb' }));
@@ -36,11 +35,11 @@ const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
     origin: [
-	
-	 "http://localhost:5173",
+      "http://localhost:5173",
       "http://localhost:8081",
       "https://qine-admin-dashboard.onrender.com",
-  "https://qine-admin-dashboard.vercel.app"],
+      "https://qine-admin-dashboard.vercel.app"
+    ],
     methods: ["GET", "POST"],
     credentials: true
   }
