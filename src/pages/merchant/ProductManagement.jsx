@@ -7,8 +7,8 @@ import {
   X, Save, Image as ImageIcon, Camera, 
   Loader2, Minus
 } from 'lucide-react';
-import apiClient from '@/api/client';
-import merchantApi from '@/api/merchants';
+import apiClient from '@/api/client.ts';
+import merchantApi from '@/api/merchants.ts';
 const ProductManagement = () => {
   const { merchantId, businessModel, setBusinessModel } = useOutletContext();
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
