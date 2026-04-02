@@ -61,9 +61,7 @@ const ProductManagement = () => {
 
   const handleAddProduct = async (productData) => {
   try {
-    // Use the correct endpoint format that matches your backend
-    const response = await apiClient.post('/api/products', {
-      merchantId: merchantId,
+    const newProduct = await merchantApi.createProduct(merchantId, {
       name: productData.name,
       description: productData.description,
       shortDesc: productData.description?.substring(0, 100),
@@ -76,7 +74,6 @@ const ProductManagement = () => {
       weight: productData.weight ? parseFloat(productData.weight) : null,
     });
     
-    const newProduct = response.data;
     setProducts([...products, newProduct]);
     setIsProductModalOpen(false);
     alert(`✅ Product "${productData.name}" added successfully!`);

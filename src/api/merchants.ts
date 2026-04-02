@@ -88,10 +88,22 @@ export const merchantApi = {
   },
 
   // Create product
-  createProduct: async (merchantId: string, productData: any): Promise<Product> => {
-    const response = await apiClient.post(`/merchants/${merchantId}/products`, productData);
-    return response.data;
-  },
+ createProduct: async (merchantId: string, productData: any): Promise<Product> => {
+  const response = await apiClient.post('/products', {
+    merchantId: merchantId,
+    name: productData.name,
+    description: productData.description,
+    shortDesc: productData.shortDesc,
+    price: productData.price,
+    stock: productData.stock,
+    sku: productData.sku,
+    images: productData.images,
+    categoryId: productData.categoryId,
+    isActive: productData.isActive,
+    weight: productData.weight
+  });
+  return response.data;
+},
 
   // Update product
   updateProduct: async (productId: string, productData: any): Promise<Product> => {
