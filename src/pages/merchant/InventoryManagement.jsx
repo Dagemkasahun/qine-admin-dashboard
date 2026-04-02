@@ -6,8 +6,9 @@ import {
   Edit3, Download, History, Plus, Minus, X, Save, 
   Loader2, TrendingDown, TrendingUp
 } from 'lucide-react';
-import { merchantApi } from '@/api/merchants';
-import { inventoryApi } from '@/api/inventory';
+import apiClient from '@/api/client.ts';
+import merchantApi from '@/api/inventory.ts';
+import { merchantApi } from '@/api/merchants.ts';
 
 const InventoryManagement = () => {
   const { merchantId, businessModel } = useOutletContext();
