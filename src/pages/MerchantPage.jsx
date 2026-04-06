@@ -1,16 +1,13 @@
 // src/pages/MerchantPage.jsx
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Outlet, useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { 
   Store, Plus, Settings, Camera, X, Save, 
   Image as ImageIcon, Home, Bell, CheckCircle,
   MapPin, Package, Info, ShoppingBag, BarChart3,
-  Users, LogOut, Menu, XCircle, ArrowLeft, Upload,
-  Search, Clock
+  Users, LogOut, Menu, XCircle, ArrowLeft, Upload
 } from 'lucide-react';
-
-// Import the actual merchantApi from your API file
-import { merchantApi } from '@/api/merchants';
+import { merchantApi } from '../api/merchants';
 
 const MerchantPage = () => {
   const { merchantId } = useParams();
@@ -20,24 +17,54 @@ const MerchantPage = () => {
   // --- MODAL STATES ---
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
   
   // --- DATA STATE ---
   const [businessModel, setBusinessModel] = useState({
     id: merchantId,
-    name: 'Tigray Highlands Honey',
-    type: 'Product (Shop)',
-    category: 'Food & Beverage',
-    subCategory: 'Honey & Beeswax',
-    description: 'Premium organic honey sourced from the high-altitude flora of northern Ethiopia.',
-    location: 'Bole, Addis Ababa',
-    status: 'Verified',
-    email: 'contact@highlandshoney.et',
-    phone: '+251 911 223 344',
+    name: '',
+    type: '',
+    category: '',
+    description: '',
+    location: '',
+    status: '',
+    email: '',
+    phone: '',
     coverImage: null,
-    logo: null
+    logo: null,
+    joinedDate: ''
   });
 
-  // Navigation tabs for merchant sub-pages
+  // Fetch merchant data
+  useEffect(() => {
+    const fetchMerchant = async () => {
+      try {
+        const data = await merchantApi.getById(merchantId);
+        setBusinessModel({
+          id: data.id,
+          name: data.businessName,
+          type: data.businessType,
+          category: data.category,
+          description: data.description,
+          location: data.address,
+          status: data.status,
+          email: data.businessEmail,
+          phone: data.businessPhone,
+          coverImage: data.coverImage,
+          logo: data.logo,
+          joinedDate: new Date(data.createdAt).toLocaleDateString()
+        });
+      } catch (error) {
+        console.error('Error fetching merchant:', error);
+      }
+    };
+    
+    if (merchantId) {
+      fetchMerchant();
+    }
+  }, [merchantId]);
+
+  // Navigation tabs
   const navTabs = [
     { path: '', label: 'Dashboard', icon: Home, exact: true },
     { path: 'products', label: 'Products', icon: Package },
@@ -50,8 +77,9 @@ const MerchantPage = () => {
   // --- HANDLERS ---
   const handleProfileUpdate = async (updatedData) => {
     try {
-      // Call the API to update merchant profile
-      const response = await merchantApi.updateProfile(merchantId, {
+      setLoading(true);
+      
+      const updatePayload = {
         businessName: updatedData.name,
         description: updatedData.description,
         address: updatedData.location,
@@ -60,16 +88,28 @@ const MerchantPage = () => {
         businessEmail: updatedData.email,
         logo: updatedData.logo,
         coverImage: updatedData.coverImage,
-        configuration: updatedData.configuration
-      });
+      };
       
-      // Update local state
-      setBusinessModel(prev => ({ ...prev, ...updatedData }));
+      await merchantApi.updateProfile(merchantId, updatePayload);
+      
+      setBusinessModel(prev => ({ 
+        ...prev, 
+        name: updatedData.name,
+        description: updatedData.description,
+        location: updatedData.location,
+        phone: updatedData.phone,
+        email: updatedData.email,
+        logo: updatedData.logo,
+        coverImage: updatedData.coverImage
+      }));
+      
       setIsProfileModalOpen(false);
       alert('✅ Profile updated successfully!');
     } catch (error) {
       console.error('Error updating profile:', error);
       alert('❌ Error updating profile: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -84,6 +124,7 @@ const MerchantPage = () => {
     return location.pathname === `/merchant/${merchantId}/${path}`;
   };
 
+  // THIS RETURN MUST BE INSIDE THE COMPONENT FUNCTION
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
       {/* --- TOP NAVIGATION BAR --- */}
@@ -109,16 +150,6 @@ const MerchantPage = () => {
           </div>
           
           <div className="flex items-center gap-3">
-            {/* Search Bar */}
-            <div className="relative hidden md:block">
-              <input 
-                type="text" 
-                placeholder="Search orders..." 
-                className="pl-10 pr-4 py-2 bg-slate-100 border-none rounded-full text-sm focus:ring-2 focus:ring-blue-500 w-64"
-              />
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-            </div>
-            
             <button 
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
               className="lg:hidden p-2 text-slate-500 hover:bg-slate-100 rounded-lg transition"
@@ -131,7 +162,6 @@ const MerchantPage = () => {
               <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
             </button>
             
-            {/* Edit Profile Button */}
             <button 
               onClick={() => setIsProfileModalOpen(true)}
               className="hidden sm:flex items-center gap-2 px-4 py-2.5 bg-slate-100 text-slate-700 rounded-xl font-bold text-[10px] uppercase tracking-wider hover:bg-slate-200 transition"
@@ -154,7 +184,7 @@ const MerchantPage = () => {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 lg:py-8">
-        {/* --- BUSINESS HEADER CARD --- */}
+        {/* Business Header Card */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 mb-6 overflow-hidden">
           {/* Cover Image Area */}
           <div className="h-32 sm:h-40 bg-gradient-to-r from-blue-50 to-indigo-50 relative group">
@@ -177,14 +207,13 @@ const MerchantPage = () => {
           <div className="px-6 pb-6 -mt-10">
             <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
               <div className="flex items-end gap-4">
-                {/* Logo/Icon */}
                 <div className="relative group/logo">
                   <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl bg-white p-1 shadow-lg border border-slate-100">
                     {businessModel.logo ? (
                       <img src={businessModel.logo} className="w-full h-full object-cover rounded-lg" alt="Logo" />
                     ) : (
                       <div className="w-full h-full rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-bold text-xl">
-                        {businessModel.name.charAt(0)}
+                        {businessModel.name.charAt(0) || '?'}
                       </div>
                     )}
                   </div>
@@ -200,18 +229,16 @@ const MerchantPage = () => {
                   <div className="flex items-center gap-2 flex-wrap">
                     <h2 className="text-xl sm:text-2xl font-black text-slate-900">{businessModel.name}</h2>
                     <span className="flex items-center gap-1 bg-emerald-50 text-emerald-600 text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
-                      <CheckCircle className="w-3 h-3" /> {businessModel.status}
+                      <CheckCircle className="w-3 h-3" /> {businessModel.status || 'Active'}
                     </span>
                   </div>
                   <div className="flex flex-wrap gap-3 mt-1 text-[9px] font-bold text-slate-400 uppercase tracking-wider">
                     <span className="flex items-center gap-1"><MapPin className="w-3 h-3" /> {businessModel.location}</span>
                     <span className="flex items-center gap-1"><Package className="w-3 h-3" /> {businessModel.category}</span>
-                    <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> Joined Oct 2025</span>
                   </div>
                 </div>
               </div>
               
-              {/* Mobile Action Buttons */}
               <div className="flex sm:hidden gap-2">
                 <button 
                   onClick={() => setIsProfileModalOpen(true)}
@@ -230,7 +257,7 @@ const MerchantPage = () => {
           </div>
         </div>
 
-        {/* --- TAB NAVIGATION (Horizontal Tabs) --- */}
+        {/* Tab Navigation */}
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm mb-6 overflow-x-auto">
           <div className="flex min-w-max">
             {navTabs.map((tab) => (
@@ -250,15 +277,11 @@ const MerchantPage = () => {
           </div>
         </div>
 
-        {/* --- DYNAMIC CONTENT --- */}
-        <Outlet context={{ 
-          merchantId,
-          businessModel,
-          setBusinessModel
-        }} />
+        {/* Dynamic Content */}
+        <Outlet context={{ merchantId, businessModel, setBusinessModel }} />
       </div>
 
-      {/* --- MOBILE BOTTOM SHEET MENU --- */}
+      {/* Mobile Menu */}
       {isMobileMenuOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="absolute inset-0 bg-black/50" onClick={() => setIsMobileMenuOpen(false)} />
@@ -313,7 +336,7 @@ const MerchantPage = () => {
         </div>
       )}
 
-      {/* --- ENHANCED PROFILE MODAL (with Image Upload) --- */}
+      {/* Profile Modal */}
       {isProfileModalOpen && (
         <ProfileModal 
           businessModel={businessModel}
@@ -329,12 +352,10 @@ const MerchantPage = () => {
 const ProfileModal = ({ businessModel, onClose, onSave }) => {
   const [formData, setFormData] = useState({
     name: businessModel.name,
-    type: businessModel.type,
-    category: businessModel.category,
-    location: businessModel.location,
     description: businessModel.description,
-    email: businessModel.email,
+    location: businessModel.location,
     phone: businessModel.phone,
+    email: businessModel.email,
     coverImage: businessModel.coverImage,
     logo: businessModel.logo
   });
@@ -343,6 +364,7 @@ const ProfileModal = ({ businessModel, onClose, onSave }) => {
   const [logoPreview, setLogoPreview] = useState(businessModel.logo);
   const coverInputRef = useRef(null);
   const logoInputRef = useRef(null);
+  const [saving, setSaving] = useState(false);
 
   const handleCoverUpload = (e) => {
     const file = e.target.files[0];
@@ -368,9 +390,16 @@ const ProfileModal = ({ businessModel, onClose, onSave }) => {
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    onSave(formData);
+    setSaving(true);
+    try {
+      await onSave(formData);
+    } catch (error) {
+      console.error('Error saving:', error);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -461,29 +490,6 @@ const ProfileModal = ({ businessModel, onClose, onSave }) => {
               />
             </div>
             <div>
-              <label className="text-xs font-bold uppercase text-slate-500 mb-1 block">Business Type</label>
-              <select 
-                value={formData.type}
-                onChange={(e) => setFormData({...formData, type: e.target.value})}
-                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none"
-              >
-                <option>Product (Shop)</option>
-                <option>Service</option>
-                <option>Restaurant</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-bold uppercase text-slate-500 mb-1 block">Category</label>
-              <input 
-                value={formData.category}
-                onChange={(e) => setFormData({...formData, category: e.target.value})}
-                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" 
-              />
-            </div>
-            <div>
               <label className="text-xs font-bold uppercase text-slate-500 mb-1 block">Location</label>
               <input 
                 value={formData.location}
@@ -523,8 +529,21 @@ const ProfileModal = ({ businessModel, onClose, onSave }) => {
             </div>
           </div>
 
-          <button type="submit" className="w-full py-4 bg-slate-900 text-white rounded-xl font-bold uppercase text-xs tracking-wider flex items-center justify-center gap-2 hover:bg-blue-600 transition">
-            <Save className="w-4 h-4" /> Save All Changes
+          <button 
+            type="submit" 
+            disabled={saving}
+            className="w-full py-4 bg-slate-900 text-white rounded-xl font-bold uppercase text-xs tracking-wider flex items-center justify-center gap-2 hover:bg-blue-600 transition disabled:opacity-50"
+          >
+            {saving ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4" /> Save All Changes
+              </>
+            )}
           </button>
         </form>
       </div>

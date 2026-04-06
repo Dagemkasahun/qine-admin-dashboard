@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import apiClient from '@/api/client';
 import { merchantApi } from '@/api/merchants';
+
 const ProductManagement = () => {
   const { merchantId, businessModel, setBusinessModel } = useOutletContext();
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
@@ -21,10 +22,12 @@ const ProductManagement = () => {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
 
-  // Fetch products on component mount
+  // Fetch products and categories on component mount
   useEffect(() => {
-    fetchProducts();
-    fetchCategories();
+    if (merchantId) {
+      fetchProducts();
+      fetchCategories();
+    }
   }, [merchantId]);
 
   const fetchProducts = async () => {
@@ -32,56 +35,59 @@ const ProductManagement = () => {
       setLoading(true);
       setError(null);
       const data = await merchantApi.getProducts(merchantId);
-      setProducts(data);
+      setProducts(data || []);
     } catch (error) {
       console.error('Error fetching products:', error);
       setError('Failed to load products. Please try again.');
+      setProducts([]);
     } finally {
       setLoading(false);
     }
   };
 
- const fetchCategories = async () => {
-  try {
-    // Use the correct categories endpoint, not products
-    const response = await apiClient.get(`/merchants/${merchantId}/categories`);
-    const data = response.data;
-    setCategories(data);
-    console.log('Categories loaded:', data);
-  } catch (error) {
-    console.error('Error fetching categories:', error);
-  }
-};
+  const fetchCategories = async () => {
+    try {
+      // Try to fetch categories, but don't fail if endpoint doesn't exist
+      const response = await apiClient.get(`/merchants/${merchantId}/categories`);
+      setCategories(response.data || []);
+    } catch (error) {
+      console.warn('Could not fetch categories:', error);
+      // Set empty array instead of failing
+      setCategories([]);
+    }
+  };
 
   // Calculate stats from real products
   const lowStockProducts = products.filter(p => p.stock <= 5);
   const totalProducts = products.length;
   const totalValue = products.reduce((sum, p) => sum + (p.price * p.stock), 0);
-  const topSeller = products.reduce((prev, current) => (prev.totalSold > current.totalSold) ? prev : current, products[0]);
+  const topSeller = products.length > 0 ? products.reduce((prev, current) => 
+    (prev.totalSold || 0) > (current.totalSold || 0) ? prev : current
+  , products[0]) : { name: '-', totalSold: 0 };
 
   const handleAddProduct = async (productData) => {
-  try {
-    const newProduct = await merchantApi.createProduct(merchantId, {
-      name: productData.name,
-      description: productData.description,
-      shortDesc: productData.description?.substring(0, 100),
-      price: parseFloat(productData.price),
-      stock: parseInt(productData.stock),
-      sku: productData.sku || null,
-      images: productData.image ? JSON.stringify([productData.image]) : null,
-      categoryId: productData.categoryId || null,
-      isActive: true,
-      weight: productData.weight ? parseFloat(productData.weight) : null,
-    });
-    
-    setProducts([...products, newProduct]);
-    setIsProductModalOpen(false);
-    alert(`✅ Product "${productData.name}" added successfully!`);
-  } catch (error) {
-    console.error('Error adding product:', error);
-    alert('❌ Error adding product: ' + (error.response?.data?.message || error.message));
-  }
-};
+    try {
+      const newProduct = await merchantApi.createProduct(merchantId, {
+        name: productData.name,
+        description: productData.description,
+        shortDesc: productData.description?.substring(0, 100),
+        price: parseFloat(productData.price),
+        stock: parseInt(productData.stock),
+        sku: productData.sku || null,
+        images: productData.image ? [productData.image] : [],
+        categoryId: productData.categoryId || null,
+        isActive: true,
+        weight: productData.weight ? parseFloat(productData.weight) : null,
+      });
+      
+      setProducts([newProduct, ...products]);
+      setIsProductModalOpen(false);
+      alert(`✅ Product "${productData.name}" added successfully!`);
+    } catch (error) {
+      console.error('Error adding product:', error);
+      alert('❌ Error adding product: ' + (error.response?.data?.message || error.message));
+    }
+  };
 
   const handleUpdateProduct = async (productData) => {
     try {
@@ -92,7 +98,7 @@ const ProductManagement = () => {
         price: parseFloat(productData.price),
         stock: parseInt(productData.stock),
         sku: productData.sku || null,
-        images: productData.image ? JSON.stringify([productData.image]) : null,
+        images: productData.image ? [productData.image] : [],
         categoryId: productData.categoryId || null,
       });
       
@@ -145,21 +151,6 @@ const ProductManagement = () => {
       <div className="flex items-center justify-center py-16">
         <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
         <span className="ml-3 text-slate-600">Loading products...</span>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="bg-red-50 border border-red-200 rounded-2xl p-8 text-center">
-        <Package className="w-12 h-12 text-red-400 mx-auto mb-3" />
-        <p className="text-red-600 font-medium">{error}</p>
-        <button 
-          onClick={fetchProducts}
-          className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700"
-        >
-          Try Again
-        </button>
       </div>
     );
   }
@@ -251,10 +242,10 @@ const ProductManagement = () => {
               <tr key={product.id} className="group hover:bg-slate-50/50 transition-colors">
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center">
-                      {product.images ? (
+                    <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center overflow-hidden">
+                      {product.images && product.images.length > 0 ? (
                         <img 
-                          src={JSON.parse(product.images)[0]} 
+                          src={typeof product.images === 'string' ? JSON.parse(product.images)[0] : product.images[0]} 
                           className="w-full h-full object-cover rounded-xl" 
                           alt={product.name} 
                         />
@@ -330,7 +321,7 @@ const ProductManagement = () => {
           </tbody>
         </table>
 
-        {filteredProducts.length === 0 && (
+        {filteredProducts.length === 0 && !error && (
           <div className="text-center py-12">
             <Package className="w-12 h-12 text-slate-300 mx-auto mb-3" />
             <p className="text-slate-400 font-medium">No products found</p>
@@ -339,6 +330,18 @@ const ProductManagement = () => {
               className="mt-3 text-blue-600 text-sm font-medium hover:text-blue-700"
             >
               Add your first product →
+            </button>
+          </div>
+        )}
+
+        {error && (
+          <div className="text-center py-12">
+            <p className="text-red-500 font-medium">{error}</p>
+            <button 
+              onClick={fetchProducts}
+              className="mt-3 text-blue-600 text-sm font-medium hover:text-blue-700"
+            >
+              Try Again
             </button>
           </div>
         )}
@@ -369,11 +372,11 @@ const ProductModal = ({ product, categories, onClose, onSave }) => {
     stock: product?.stock || '',
     sku: product?.sku || '',
     categoryId: product?.categoryId || '',
-    image: product?.images ? JSON.parse(product.images)[0] : null
+    image: product?.images ? (typeof product.images === 'string' ? JSON.parse(product.images)[0] : product.images[0]) : null
   });
   
   const [imagePreview, setImagePreview] = useState(
-    product?.images ? JSON.parse(product.images)[0] : null
+    product?.images ? (typeof product.images === 'string' ? JSON.parse(product.images)[0] : product.images[0]) : null
   );
   const [loading, setLoading] = useState(false);
   const imageInputRef = useRef(null);
@@ -400,6 +403,7 @@ const ProductModal = ({ product, categories, onClose, onSave }) => {
     setLoading(true);
     try {
       await onSave(formData);
+      onClose();
     } catch (error) {
       console.error('Error saving product:', error);
     } finally {
@@ -449,7 +453,6 @@ const ProductModal = ({ product, categories, onClose, onSave }) => {
                 className="hidden"
               />
             </div>
-            <p className="text-[10px] text-slate-400 mt-1">Recommended: Square format (1:1), PNG or JPG, clear image</p>
           </div>
 
           {/* Product Name - Required */}
@@ -465,7 +468,6 @@ const ProductModal = ({ product, categories, onClose, onSave }) => {
               className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
               placeholder="e.g., Organic White Honey (500g)"
             />
-            <p className="text-[10px] text-slate-400 mt-1">Short and clear product name</p>
           </div>
 
           {/* Description */}
@@ -473,12 +475,11 @@ const ProductModal = ({ product, categories, onClose, onSave }) => {
             <label className="text-xs font-bold uppercase text-slate-500 mb-1 block">Description</label>
             <textarea 
               rows="3"
-              value={formData.description}
+              value={formData.description || ''}
               onChange={(e) => setFormData({...formData, description: e.target.value})}
               className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none resize-none"
               placeholder="Brief description of the product (1-2 sentences)"
             />
-            <p className="text-[10px] text-slate-400 mt-1">1-2 sentences describing the product</p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -496,7 +497,6 @@ const ProductModal = ({ product, categories, onClose, onSave }) => {
                 placeholder="0.00"
                 step="0.01"
               />
-              <p className="text-[10px] text-slate-400 mt-1">Current selling price</p>
             </div>
             
             {/* Stock Level */}
@@ -512,7 +512,6 @@ const ProductModal = ({ product, categories, onClose, onSave }) => {
                 className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none"
                 placeholder="0"
               />
-              <p className="text-[10px] text-slate-400 mt-1">Current inventory count</p>
             </div>
           </div>
 
@@ -522,7 +521,7 @@ const ProductModal = ({ product, categories, onClose, onSave }) => {
               <label className="text-xs font-bold uppercase text-slate-500 mb-1 block">SKU (Optional)</label>
               <input 
                 type="text"
-                value={formData.sku}
+                value={formData.sku || ''}
                 onChange={(e) => setFormData({...formData, sku: e.target.value})}
                 className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none"
                 placeholder="e.g., HNY-001"
@@ -533,7 +532,7 @@ const ProductModal = ({ product, categories, onClose, onSave }) => {
             <div>
               <label className="text-xs font-bold uppercase text-slate-500 mb-1 block">Category</label>
               <select 
-                value={formData.categoryId}
+                value={formData.categoryId || ''}
                 onChange={(e) => setFormData({...formData, categoryId: e.target.value})}
                 className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none"
               >

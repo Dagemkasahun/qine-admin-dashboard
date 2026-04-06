@@ -7,8 +7,8 @@ import {
   ChevronDown, ChevronUp, Phone, MapPin,
   Calendar, DollarSign, Loader2, RefreshCw
 } from 'lucide-react';
-//import { merchantApi } from '../../api/merchants.js';
-
+import { merchantApi } from '../../api/merchants.js';
+//import { merchantApi } from '../api/merchants';
 const OrderManagement = () => {
   const { merchantId } = useOutletContext();
   const [orders, setOrders] = useState([]);

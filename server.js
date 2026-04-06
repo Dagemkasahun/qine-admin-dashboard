@@ -18,12 +18,16 @@ app.use(cors({
     'http://localhost:5173',
     'http://localhost:5174',
     'https://qine-admin.vercel.app',
+    'https://qine-admin-dashboard.vercel.app',  // Your Vercel URL
     'https://qine-backend.onrender.com',
-    'https://qine-admin-dashboard.vercel.app',
     'https://qine-admin-dashboard.onrender.com'
   ],
-  methods: ["GET", "POST"],
-  credentials: true
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  credentials: true,
+  // Add this to handle preflight requests properly
+  preflightContinue: false,
+  optionsSuccessStatus: 204
 }));
 
 app.use(express.json({ limit: '50mb' }));
