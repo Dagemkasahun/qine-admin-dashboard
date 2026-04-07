@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Save, Store, Upload, Phone, Mail, MapPin, Image } from 'lucide-react';
-import { api } from '../services/api';
+import apiClient from '@/api/client';
 
 const AddMerchant = () => {
   const navigate = useNavigate();
@@ -13,6 +13,13 @@ const AddMerchant = () => {
   const [coverPreview, setCoverPreview] = useState(null);
   
   const [formData, setFormData] = useState({
+    // Owner Information (REQUIRED for foreign key)
+    ownerFirstName: '',
+    ownerLastName: '',
+    ownerEmail: '',
+    ownerPhone: '',
+    ownerPassword: '',
+    
     // Business Info
     businessName: '',
     businessType: 'PRODUCT',
@@ -42,9 +49,6 @@ const AddMerchant = () => {
     hasInventory: true,
     hasDelivery: true,
     hasBooking: false,
-    
-    // IDs (will be set by server)
-    ownerId: null
   });
 
   const handleChange = (e) => {
@@ -84,30 +88,33 @@ const AddMerchant = () => {
     setLoading(true);
 
     try {
-      // First, create a temporary owner (in production, this would be the logged-in user)
-      // For now, we'll use a default owner ID or create one
-      const tempOwner = {
-        email: formData.businessEmail,
-        phone: formData.businessPhone,
-        password: 'temporary123', // This should be handled properly
-        firstName: formData.businessName.split(' ')[0] || 'Owner',
-        lastName: formData.businessName.split(' ')[1] || 'User',
+      // STEP 1: Create owner user first (REQUIRED for foreign key)
+      console.log('Step 1: Creating owner account...');
+      const userData = {
+        email: formData.ownerEmail,
+        phone: formData.ownerPhone,
+        password: formData.ownerPassword,
+        firstName: formData.ownerFirstName,
+        lastName: formData.ownerLastName,
         role: 'MERCHANT'
       };
 
-      // Create owner user first (or use existing user)
       let ownerId;
       try {
-        const userResponse = await api.auth.register(tempOwner);
-        ownerId = userResponse.id;
+        const userResponse = await apiClient.post('/auth/register', userData);
+        ownerId = userResponse.data.id;
+        console.log('Owner created with ID:', ownerId);
       } catch (userError) {
-        console.log('User might already exist, using fallback');
-        ownerId = 'temp-owner-id'; // In production, you'd handle this properly
+        console.error('User creation error:', userError);
+        // If user exists, we need to handle properly
+        // For now, show error
+        throw new Error('Failed to create owner account. Email might already exist.');
       }
 
-      // Prepare merchant data
+      // STEP 2: Create merchant with ownerId
+      console.log('Step 2: Creating merchant...');
       const merchantData = {
-        ownerId: ownerId,
+        ownerId: ownerId, // This is REQUIRED for the foreign key constraint!
         businessName: formData.businessName,
         businessType: formData.businessType,
         category: formData.category,
@@ -124,37 +131,28 @@ const AddMerchant = () => {
         licenseNumber: formData.licenseNumber || null,
         tinNumber: formData.tinNumber || null,
         yearEstablished: formData.yearEstablished ? parseInt(formData.yearEstablished) : null,
-        
-        // Images as base64 for now (in production, you'd upload to cloud storage)
         logo: logoPreview,
         coverImage: coverPreview,
-        
-        // JSON fields
         configuration: JSON.stringify({
           hasProducts: formData.hasProducts,
           hasInventory: formData.hasInventory,
           hasDelivery: formData.hasDelivery,
           hasBooking: formData.hasBooking
         }),
-        
-        status: 'PENDING',
-        rating: 0,
-        totalReviews: 0,
-        totalOrders: 0,
-        totalRevenue: 0
+        status: 'PENDING'
       };
 
       console.log('Submitting merchant data:', merchantData);
       
-      // Send to API
-      const response = await api.merchants.create(merchantData);
-      console.log('Merchant created:', response);
+      const response = await apiClient.post('/merchants', merchantData);
+      console.log('Merchant created:', response.data);
       
       alert('✅ Merchant created successfully! It will be reviewed by admin.');
       navigate('/merchants');
     } catch (error) {
       console.error('Error creating merchant:', error);
-      alert('❌ Error creating merchant: ' + (error.response?.data?.error || error.message));
+      const errorMessage = error.response?.data?.error || error.message;
+      alert(`❌ Error creating merchant: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
@@ -176,6 +174,92 @@ const AddMerchant = () => {
       {/* Form */}
       <div className="bg-white rounded-lg shadow-lg">
         <form onSubmit={handleSubmit} className="p-6 space-y-8">
+          {/* Owner Information - NEW SECTION (CRITICAL) */}
+          <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+            <h2 className="text-lg font-semibold text-blue-800 mb-4 pb-2 border-b border-blue-200">
+              Owner Information (Required)
+            </h2>
+            <p className="text-sm text-blue-600 mb-4">This creates the merchant's owner account</p>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  First Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  name="ownerFirstName"
+                  required
+                  value={formData.ownerFirstName}
+                  onChange={handleChange}
+                  className="w-full border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="John"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Last Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  name="ownerLastName"
+                  required
+                  value={formData.ownerLastName}
+                  onChange={handleChange}
+                  className="w-full border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Doe"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Email <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <input
+                    type="email"
+                    name="ownerEmail"
+                    required
+                    value={formData.ownerEmail}
+                    onChange={handleChange}
+                    className="pl-10 w-full border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="owner@example.com"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Phone <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <input
+                    type="tel"
+                    name="ownerPhone"
+                    required
+                    value={formData.ownerPhone}
+                    onChange={handleChange}
+                    className="pl-10 w-full border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="+251911223344"
+                  />
+                </div>
+              </div>
+              <div className="col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Password <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="password"
+                  name="ownerPassword"
+                  required
+                  value={formData.ownerPassword}
+                  onChange={handleChange}
+                  className="w-full border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Minimum 6 characters"
+                />
+              </div>
+            </div>
+          </div>
+
           {/* Basic Information */}
           <div>
             <h2 className="text-lg font-semibold text-gray-800 mb-4 pb-2 border-b">Basic Information</h2>
@@ -264,7 +348,7 @@ const AddMerchant = () => {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Phone Number <span className="text-red-500">*</span>
+                  Business Phone <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
                   <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -282,7 +366,7 @@ const AddMerchant = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Email <span className="text-red-500">*</span>
+                  Business Email <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -347,7 +431,6 @@ const AddMerchant = () => {
                   value={formData.city}
                   onChange={handleChange}
                   className="w-full border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Addis Ababa"
                 />
               </div>
 
@@ -364,86 +447,6 @@ const AddMerchant = () => {
                   placeholder="e.g., Bole"
                 />
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Latitude
-                </label>
-                <input
-                  type="number"
-                  step="any"
-                  name="latitude"
-                  value={formData.latitude}
-                  onChange={handleChange}
-                  className="w-full border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="9.0089"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Longitude
-                </label>
-                <input
-                  type="number"
-                  step="any"
-                  name="longitude"
-                  value={formData.longitude}
-                  onChange={handleChange}
-                  className="w-full border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="38.7945"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Business Details */}
-          <div>
-            <h2 className="text-lg font-semibold text-gray-800 mb-4 pb-2 border-b">Business Details</h2>
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  License Number
-                </label>
-                <input
-                  type="text"
-                  name="licenseNumber"
-                  value={formData.licenseNumber}
-                  onChange={handleChange}
-                  className="w-full border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="LIC-123-2024"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  TIN Number
-                </label>
-                <input
-                  type="text"
-                  name="tinNumber"
-                  value={formData.tinNumber}
-                  onChange={handleChange}
-                  className="w-full border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="TIN-001"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Year Est.
-                </label>
-                <input
-                  type="number"
-                  name="yearEstablished"
-                  value={formData.yearEstablished}
-                  onChange={handleChange}
-                  className="w-full border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="2020"
-                  min="1900"
-                  max={new Date().getFullYear()}
-                />
-              </div>
             </div>
           </div>
 
@@ -451,89 +454,34 @@ const AddMerchant = () => {
           <div>
             <h2 className="text-lg font-semibold text-gray-800 mb-4 pb-2 border-b">Images</h2>
             <div className="grid grid-cols-2 gap-6">
-              {/* Logo Upload */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Business Logo
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Business Logo</label>
                 <div className="border-2 border-dashed rounded-lg p-4 text-center hover:border-blue-500 transition">
                   {logoPreview ? (
                     <div className="space-y-3">
-                      <img 
-                        src={logoPreview} 
-                        alt="Logo preview" 
-                        className="w-32 h-32 mx-auto object-contain rounded-lg"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setLogoFile(null);
-                          setLogoPreview(null);
-                        }}
-                        className="text-sm text-red-600 hover:text-red-800"
-                      >
-                        Remove
-                      </button>
+                      <img src={logoPreview} alt="Logo preview" className="w-32 h-32 mx-auto object-contain rounded-lg" />
+                      <button type="button" onClick={() => { setLogoFile(null); setLogoPreview(null); }} className="text-sm text-red-600">Remove</button>
                     </div>
                   ) : (
                     <div className="space-y-3">
                       <Image className="mx-auto h-12 w-12 text-gray-400" />
-                      <div className="text-sm text-gray-600">
-                        <label className="relative cursor-pointer rounded-md font-medium text-blue-600 hover:text-blue-500">
-                          <span>Upload a logo</span>
-                          <input
-                            type="file"
-                            className="sr-only"
-                            accept="image/*"
-                            onChange={handleLogoChange}
-                          />
-                        </label>
-                        <p className="text-xs text-gray-500 mt-1">PNG, JPG up to 5MB</p>
-                      </div>
+                      <label className="cursor-pointer text-blue-600">Upload logo<input type="file" className="hidden" accept="image/*" onChange={handleLogoChange} /></label>
                     </div>
                   )}
                 </div>
               </div>
-
-              {/* Cover Image Upload */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Cover Image
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Cover Image</label>
                 <div className="border-2 border-dashed rounded-lg p-4 text-center hover:border-blue-500 transition">
                   {coverPreview ? (
                     <div className="space-y-3">
-                      <img 
-                        src={coverPreview} 
-                        alt="Cover preview" 
-                        className="w-full h-32 object-cover rounded-lg"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCoverFile(null);
-                          setCoverPreview(null);
-                        }}
-                        className="text-sm text-red-600 hover:text-red-800"
-                      >
-                        Remove
-                      </button>
+                      <img src={coverPreview} alt="Cover preview" className="w-full h-32 object-cover rounded-lg" />
+                      <button type="button" onClick={() => { setCoverFile(null); setCoverPreview(null); }} className="text-sm text-red-600">Remove</button>
                     </div>
                   ) : (
                     <div className="space-y-3">
                       <Image className="mx-auto h-12 w-12 text-gray-400" />
-                      <div className="text-sm text-gray-600">
-                        <label className="relative cursor-pointer rounded-md font-medium text-blue-600 hover:text-blue-500">
-                          <span>Upload cover image</span>
-                          <input
-                            type="file"
-                            className="sr-only"
-                            accept="image/*"
-                            onChange={handleCoverChange}
-                          />
-                        </label>
-                        <p className="text-xs text-gray-500 mt-1">PNG, JPG up to 5MB</p>
-                      </div>
+                      <label className="cursor-pointer text-blue-600">Upload cover<input type="file" className="hidden" accept="image/*" onChange={handleCoverChange} /></label>
                     </div>
                   )}
                 </div>
@@ -545,78 +493,30 @@ const AddMerchant = () => {
           <div>
             <h2 className="text-lg font-semibold text-gray-800 mb-4 pb-2 border-b">Features</h2>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <label className="flex items-center space-x-2 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
-                <input
-                  type="checkbox"
-                  name="hasProducts"
-                  checked={formData.hasProducts}
-                  onChange={handleChange}
-                  className="rounded text-blue-600"
-                />
-                <span className="text-sm">Has Products</span>
+              <label className="flex items-center space-x-2 p-3 bg-gray-50 rounded-lg cursor-pointer">
+                <input type="checkbox" name="hasProducts" checked={formData.hasProducts} onChange={handleChange} />
+                <span>Has Products</span>
               </label>
-              
-              <label className="flex items-center space-x-2 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
-                <input
-                  type="checkbox"
-                  name="hasInventory"
-                  checked={formData.hasInventory}
-                  onChange={handleChange}
-                  className="rounded text-blue-600"
-                />
-                <span className="text-sm">Track Inventory</span>
+              <label className="flex items-center space-x-2 p-3 bg-gray-50 rounded-lg cursor-pointer">
+                <input type="checkbox" name="hasInventory" checked={formData.hasInventory} onChange={handleChange} />
+                <span>Track Inventory</span>
               </label>
-              
-              <label className="flex items-center space-x-2 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
-                <input
-                  type="checkbox"
-                  name="hasDelivery"
-                  checked={formData.hasDelivery}
-                  onChange={handleChange}
-                  className="rounded text-blue-600"
-                />
-                <span className="text-sm">Offers Delivery</span>
+              <label className="flex items-center space-x-2 p-3 bg-gray-50 rounded-lg cursor-pointer">
+                <input type="checkbox" name="hasDelivery" checked={formData.hasDelivery} onChange={handleChange} />
+                <span>Offers Delivery</span>
               </label>
-              
-              <label className="flex items-center space-x-2 p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
-                <input
-                  type="checkbox"
-                  name="hasBooking"
-                  checked={formData.hasBooking}
-                  onChange={handleChange}
-                  className="rounded text-blue-600"
-                />
-                <span className="text-sm">Accepts Bookings</span>
+              <label className="flex items-center space-x-2 p-3 bg-gray-50 rounded-lg cursor-pointer">
+                <input type="checkbox" name="hasBooking" checked={formData.hasBooking} onChange={handleChange} />
+                <span>Accepts Bookings</span>
               </label>
             </div>
           </div>
 
-          {/* Form Actions */}
+          {/* Submit Buttons */}
           <div className="flex justify-end space-x-4 pt-4 border-t">
-            <button
-              type="button"
-              onClick={() => navigate('/merchants')}
-              className="px-6 py-2 border rounded-lg hover:bg-gray-50 transition"
-              disabled={loading}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Creating...
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4 mr-2" />
-                  Create Merchant
-                </>
-              )}
+            <button type="button" onClick={() => navigate('/merchants')} className="px-6 py-2 border rounded-lg hover:bg-gray-50">Cancel</button>
+            <button type="submit" disabled={loading} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center">
+              {loading ? <><div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>Creating...</> : <><Save className="w-4 h-4 mr-2" />Create Merchant</>}
             </button>
           </div>
         </form>

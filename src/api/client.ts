@@ -2,27 +2,28 @@
 import axios from 'axios';
 
 const getApiUrl = () => {
-  // Check if we're running on Vercel (production)
-  if (import.meta.env.PROD) {
-    // Use the production backend
-    return 'https://qine-backend.onrender.com/api';
-  }
+  // Check if running in browser
+  const isLocalhost = typeof window !== 'undefined' && 
+                      (window.location.hostname === 'localhost' || 
+                       window.location.hostname === '127.0.0.1');
   
-  // Development mode - use local backend
-  if (import.meta.env.DEV) {
-    return 'http://localhost:5001/api';
-  }
-  
-  // Fallback - use environment variable if set
+  // Use environment variable if set (highest priority)
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL;
   }
   
+  // Development mode or localhost
+  if (import.meta.env.DEV || isLocalhost) {
+    return 'http://localhost:5001/api';
+  }
+  
+  // Production (Vercel, etc.)
   return 'https://qine-backend.onrender.com/api';
 };
 
 const API_URL = getApiUrl();
 console.log(`🌐 Environment: ${import.meta.env.MODE}`);
+console.log(`📍 Hostname: ${typeof window !== 'undefined' ? window.location.hostname : 'server'}`);
 console.log(`📡 API URL: ${API_URL}`);
 
 const apiClient = axios.create({
