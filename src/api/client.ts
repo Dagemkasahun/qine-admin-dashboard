@@ -14,7 +14,7 @@ const getApiUrl = () => {
   
   // Development mode or localhost
   if (import.meta.env.DEV || isLocalhost) {
-    return 'http://localhost:5001/api';
+    return 'http://localhost:5002/api';
   }
   
   // Production (Vercel, etc.)
