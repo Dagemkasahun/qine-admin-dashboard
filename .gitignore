@@ -2,3 +2,5 @@ node_modules/
 dist/
 *.txt
 package1.json
+.vercel
+.env*.local

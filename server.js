@@ -20,6 +20,9 @@ app.use(cors({
     'https://qine-admin.vercel.app',
     'https://qine-admin-dashboard.vercel.app',  // Your Vercel URL
     'https://qine-backend.onrender.com',
+	'http://192.168.8.174:5001',  // ← Add your IP
+    'http://192.168.8.174:19000', // Expo dev
+    /\.ngrok\.io$/,               // For ngrok tunnels
     'https://qine-admin-dashboard.onrender.com'
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -702,6 +705,31 @@ app.get('/api/orders/:id', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+// Get user stats (orders count, total spent)
+app.get('/api/users/:userId/stats', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    const orders = await prisma.order.findMany({
+      where: { customerId: userId }
+    });
+    
+    const totalOrders = orders.length;
+    const totalSpent = orders.reduce((sum, order) => sum + order.total, 0);
+    
+    res.json({ 
+      totalOrders, 
+      totalSpent,
+      averageOrderValue: totalOrders > 0 ? totalSpent / totalOrders : 0
+    });
+  } catch (error) {
+    console.error('Error fetching user stats:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
+
 
 // Update order status
 app.patch('/api/orders/:id/status', async (req, res) => {
