@@ -1,4 +1,4 @@
-// server.js - Add at the very top
+
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -13,39 +13,30 @@ const prisma = new PrismaClient();
 const app = express();
 const PORT = process.env.PORT || 5002;
 
+// CORS middleware - Use ONLY this, remove the manual res.header
 app.use(cors({
   origin: [
     'http://localhost:5173',
     'http://localhost:5174',
     'https://qine-admin.vercel.app',
-    'https://qine-admin-dashboard.vercel.app',  // Your Vercel URL
+    'https://qine-admin-dashboard.vercel.app',
     'https://qine-backend.onrender.com',
-	'http://192.168.8.174:5001',  // ← Add your IP
-    'http://192.168.8.174:19000', // Expo dev
-    /\.ngrok\.io$/,               // For ngrok tunnels
     'https://qine-admin-dashboard.onrender.com'
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   credentials: true,
-  // Add this to handle preflight requests properly
   preflightContinue: false,
   optionsSuccessStatus: 204
 }));
 
 app.use(express.json({ limit: '50mb' }));
 
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(204);
-  }
-  next();
-});
+// REMOVE this entire block - it's conflicting with the cors middleware above
+// app.use((req, res, next) => {
+//   res.header('Access-Control-Allow-Origin', '*');
+//   ...
+// });
 
 // Create HTTP server
 const server = http.createServer(app);
