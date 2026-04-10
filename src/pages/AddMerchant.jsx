@@ -1,7 +1,7 @@
 // src/pages/AddMerchant.jsx
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Save, Store, Upload, Phone, Mail, MapPin, Image } from 'lucide-react';
+import { ArrowLeft, Save, Store, Upload, Phone, Mail, MapPin, Image, User } from 'lucide-react';
 import apiClient from '@/api/client';
 
 const AddMerchant = () => {
@@ -14,10 +14,11 @@ const AddMerchant = () => {
   
   const [formData, setFormData] = useState({
     // Owner Information (REQUIRED for foreign key)
+    ownerUsername: '',
     ownerFirstName: '',
     ownerLastName: '',
-    ownerEmail: '',
-    ownerPhone: '',
+    ownerEmail: '',        // Optional
+    ownerPhone: '',        // Optional
     ownerPassword: '',
     
     // Business Info
@@ -88,40 +89,35 @@ const AddMerchant = () => {
     setLoading(true);
 
     try {
-      // STEP 1: Create owner user first (REQUIRED for foreign key)
+      // STEP 1: Create owner user with username
       console.log('Step 1: Creating owner account...');
       const userData = {
-        email: formData.ownerEmail,
-        phone: formData.ownerPhone,
+        username: formData.ownerUsername,
         password: formData.ownerPassword,
         firstName: formData.ownerFirstName,
         lastName: formData.ownerLastName,
+        email: formData.ownerEmail || null,
+        phone: formData.ownerPhone || null,
         role: 'MERCHANT'
       };
 
-      let ownerId;
-      try {
-        const userResponse = await apiClient.post('/auth/register', userData);
-        ownerId = userResponse.data.id;
-        console.log('Owner created with ID:', ownerId);
-      } catch (userError) {
-        console.error('User creation error:', userError);
-        // If user exists, we need to handle properly
-        // For now, show error
-        throw new Error('Failed to create owner account. Email might already exist.');
-      }
+      console.log('User data being sent:', { ...userData, password: '******' });
+
+      const userResponse = await apiClient.post('/auth/register', userData);
+      const ownerId = userResponse.data.id;
+      console.log('Owner created with ID:', ownerId);
 
       // STEP 2: Create merchant with ownerId
       console.log('Step 2: Creating merchant...');
       const merchantData = {
-        ownerId: ownerId, // This is REQUIRED for the foreign key constraint!
+        ownerId: ownerId,
         businessName: formData.businessName,
         businessType: formData.businessType,
         category: formData.category,
         subCategory: formData.subCategory || null,
         description: formData.description || null,
         businessPhone: formData.businessPhone,
-        businessEmail: formData.businessEmail,
+        businessEmail: formData.businessEmail || formData.ownerEmail,
         website: formData.website || null,
         address: formData.address,
         city: formData.city,
@@ -152,7 +148,7 @@ const AddMerchant = () => {
     } catch (error) {
       console.error('Error creating merchant:', error);
       const errorMessage = error.response?.data?.error || error.message;
-      alert(`❌ Error creating merchant: ${errorMessage}`);
+      alert(`❌ Error: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
@@ -174,13 +170,31 @@ const AddMerchant = () => {
       {/* Form */}
       <div className="bg-white rounded-lg shadow-lg">
         <form onSubmit={handleSubmit} className="p-6 space-y-8">
-          {/* Owner Information - NEW SECTION (CRITICAL) */}
+          {/* Owner Information - Required Section */}
           <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
             <h2 className="text-lg font-semibold text-blue-800 mb-4 pb-2 border-b border-blue-200">
               Owner Information (Required)
             </h2>
-            <p className="text-sm text-blue-600 mb-4">This creates the merchant's owner account</p>
+            <p className="text-sm text-blue-600 mb-4">This creates the merchant's owner account for login</p>
             <div className="grid grid-cols-2 gap-4">
+              <div className="col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Username <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <input
+                    type="text"
+                    name="ownerUsername"
+                    required
+                    value={formData.ownerUsername}
+                    onChange={handleChange}
+                    className="pl-10 w-full border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="e.g., john_doe_store"
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1">This will be used for merchant login (unique)</p>
+              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   First Name <span className="text-red-500">*</span>
@@ -211,40 +225,6 @@ const AddMerchant = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Email <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                  <input
-                    type="email"
-                    name="ownerEmail"
-                    required
-                    value={formData.ownerEmail}
-                    onChange={handleChange}
-                    className="pl-10 w-full border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="owner@example.com"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Phone <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                  <input
-                    type="tel"
-                    name="ownerPhone"
-                    required
-                    value={formData.ownerPhone}
-                    onChange={handleChange}
-                    className="pl-10 w-full border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="+251911223344"
-                  />
-                </div>
-              </div>
-              <div className="col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
                   Password <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -256,6 +236,39 @@ const AddMerchant = () => {
                   className="w-full border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Minimum 6 characters"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Phone (Optional)
+                </label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <input
+                    type="tel"
+                    name="ownerPhone"
+                    value={formData.ownerPhone}
+                    onChange={handleChange}
+                    className="pl-10 w-full border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="+251911223344"
+                  />
+                </div>
+              </div>
+              <div className="col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Personal Email (Optional)
+                </label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <input
+                    type="email"
+                    name="ownerEmail"
+                    value={formData.ownerEmail}
+                    onChange={handleChange}
+                    className="pl-10 w-full border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="owner@personal.com"
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Can be same as business email</p>
               </div>
             </div>
           </div>

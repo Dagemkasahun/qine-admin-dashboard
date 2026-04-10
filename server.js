@@ -90,26 +90,53 @@ io.on('connection', (socket) => {
 // AUTHENTICATION API
 // ============================================
 
-// Register new user
+
+// Register new user - UPDATED with username support
 app.post('/api/auth/register', async (req, res) => {
   try {
-    const { email, phone, password, firstName, lastName, role } = req.body;
+    const { username, email, phone, password, firstName, lastName, role } = req.body;
     
-    // Check if user exists
-    const existingUser = await prisma.user.findFirst({
-      where: { OR: [{ email }, { phone }] }
+    // Validate required fields
+    if (!username || !password || !firstName || !lastName) {
+      return res.status(400).json({ error: 'Username, password, first name and last name are required' });
+    }
+    
+    // Check if username exists
+    const existingUsername = await prisma.user.findUnique({
+      where: { username }
     });
     
-    if (existingUser) {
-      return res.status(400).json({ error: 'User already exists' });
+    if (existingUsername) {
+      return res.status(400).json({ error: 'Username already taken' });
+    }
+    
+    // Check if email exists (if provided)
+    if (email) {
+      const existingEmail = await prisma.user.findUnique({
+        where: { email }
+      });
+      if (existingEmail) {
+        return res.status(400).json({ error: 'Email already registered' });
+      }
+    }
+    
+    // Check if phone exists (if provided)
+    if (phone) {
+      const existingPhone = await prisma.user.findUnique({
+        where: { phone }
+      });
+      if (existingPhone) {
+        return res.status(400).json({ error: 'Phone number already registered' });
+      }
     }
     
     const hashedPassword = await bcrypt.hash(password, 10);
     
     const user = await prisma.user.create({
       data: {
-        email,
-        phone,
+        username,
+        email: email || null,
+        phone: phone || null,
         password: hashedPassword,
         firstName,
         lastName,
@@ -126,14 +153,18 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
-// Login
+// Login - supports email OR username
 app.post('/api/auth/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, username, password } = req.body;
     
-    const user = await prisma.user.findUnique({
-      where: { email }
-    });
+    // Find user by email OR username
+    let user;
+    if (email) {
+      user = await prisma.user.findUnique({ where: { email } });
+    } else if (username) {
+      user = await prisma.user.findUnique({ where: { username } });
+    }
     
     if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });

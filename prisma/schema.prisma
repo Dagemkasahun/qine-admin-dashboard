@@ -24,7 +24,7 @@ model User {
   profileImage String?
   role         String  @default("CUSTOMER") // SUPER_ADMIN, ADMIN, MERCHANT, CUSTOMER, RIDER, SUPPORT
   status       String  @default("ACTIVE") // ACTIVE, INACTIVE, SUSPENDED, PENDING_VERIFICATION
-
+  username          String    @unique
   // Verification
   emailVerified Boolean   @default(false)
   phoneVerified Boolean   @default(false)
