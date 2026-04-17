@@ -12,6 +12,7 @@ import Layout from './components/Layout/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/Login';
 
+
 // Pages
 import Dashboard from './pages/Dashboard';
 import Users from './pages/Users';
@@ -32,8 +33,10 @@ import Payments from './pages/Payments';
 import Profile from './pages/Profile';
 import Security from './pages/Security';
 import SettingsPage from './pages/SettingsPage';
-import PendingApprovals from './pages/admin/PendingApprovals';
-import CommissionManagement from './pages/admin/CommissionManagement';
+//import PendingApprovals from './pages/admin/PendingApprovals';
+import PendingApprovals from "./pages/Admin/PendingApprovals";
+import CommissionManagement from "./pages/Admin/CommissionManagement";
+//import CommissionManagement from './pages/admin/CommissionManagement';
 
 // Wrapper component to handle auth loading
 const AppContent = () => {
