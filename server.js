@@ -201,7 +201,7 @@ app.get('/api/auth/me', async (req, res) => {
 });
 
 // ============================================
-// USER API
+// USER API - COMPLETE CRUD OPERATIONS
 // ============================================
 
 // Get all users
@@ -215,18 +215,26 @@ app.get('/api/users', async (req, res) => {
         phone: true,
         firstName: true,
         lastName: true,
+        profileImage: true,
         role: true,
         status: true,
+        emailVerified: true,
+        phoneVerified: true,
+        lastLogin: true,
         createdAt: true,
+        updatedAt: true,
         addresses: true,
         merchant: true,
-        riderProfile: true
+        riderProfile: true,
+        wallet: true,
       },
       orderBy: { createdAt: 'desc' }
     });
+    
+    console.log(`📋 Fetched ${users.length} users`);
     res.json(users);
   } catch (error) {
-    console.error('Error fetching users:', error);
+    console.error('❌ Error fetching users:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -234,49 +242,225 @@ app.get('/api/users', async (req, res) => {
 // Get user by ID
 app.get('/api/users/:id', async (req, res) => {
   try {
+    const { id } = req.params;
+    
     const user = await prisma.user.findUnique({
-      where: { id: req.params.id },
+      where: { id },
       include: {
         addresses: true,
         merchant: true,
         riderProfile: true,
-        wallet: true
+        wallet: {
+          include: {
+            transactions: {
+              orderBy: { createdAt: 'desc' },
+              take: 10
+            }
+          }
+        },
+        customerOrders: {
+          take: 5,
+          orderBy: { createdAt: 'desc' }
+        },
+        reviews: {
+          take: 5,
+          orderBy: { createdAt: 'desc' }
+        }
       }
     });
+    
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
+    
     const { password, ...userWithoutPassword } = user;
+    console.log(`📋 Fetched user: ${user.id}`);
     res.json(userWithoutPassword);
   } catch (error) {
+    console.error('❌ Error fetching user:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
-// Update user (PUT)
-app.put('/api/users/:id', async (req, res) => {
+// Get user statistics
+app.get('/api/users/:userId/stats', async (req, res) => {
   try {
-    const user = await prisma.user.update({
-      where: { id: req.params.id },
+    const { userId } = req.params;
+    
+    const [orders, reviews, wallet] = await Promise.all([
+      prisma.order.findMany({ where: { customerId: userId } }),
+      prisma.review.findMany({ where: { userId } }),
+      prisma.wallet.findUnique({ where: { userId } })
+    ]);
+    
+    const totalOrders = orders.length;
+    const totalSpent = orders.reduce((sum, order) => sum + order.total, 0);
+    const completedOrders = orders.filter(o => o.status === 'DELIVERED').length;
+    const cancelledOrders = orders.filter(o => o.status === 'CANCELLED').length;
+    
+    res.json({ 
+      totalOrders, 
+      totalSpent,
+      completedOrders,
+      cancelledOrders,
+      averageOrderValue: totalOrders > 0 ? totalSpent / totalOrders : 0,
+      totalReviews: reviews.length,
+      averageRating: reviews.length > 0 
+        ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length 
+        : 0,
+      walletBalance: wallet?.balance || 0
+    });
+  } catch (error) {
+    console.error('❌ Error fetching user stats:', error);
+    res.json({ 
+      totalOrders: 0, 
+      totalSpent: 0, 
+      completedOrders: 0,
+      cancelledOrders: 0,
+      averageOrderValue: 0,
+      totalReviews: 0,
+      averageRating: 0,
+      walletBalance: 0
+    });
+  }
+});
+
+// Create user (Admin creating user)
+app.post('/api/users', async (req, res) => {
+  try {
+    const { username, email, phone, password, firstName, lastName, role, status } = req.body;
+    
+    // Validate required fields
+    if (!username || !password || !firstName || !lastName) {
+      return res.status(400).json({ error: 'Username, password, first name, and last name are required' });
+    }
+    
+    // Check if username exists
+    const existingUsername = await prisma.user.findUnique({
+      where: { username }
+    });
+    
+    if (existingUsername) {
+      return res.status(400).json({ error: 'Username already taken' });
+    }
+    
+    // Check if email exists (if provided)
+    if (email) {
+      const existingEmail = await prisma.user.findUnique({
+        where: { email }
+      });
+      if (existingEmail) {
+        return res.status(400).json({ error: 'Email already registered' });
+      }
+    }
+    
+    // Check if phone exists (if provided)
+    if (phone) {
+      const existingPhone = await prisma.user.findUnique({
+        where: { phone }
+      });
+      if (existingPhone) {
+        return res.status(400).json({ error: 'Phone number already registered' });
+      }
+    }
+    
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
+    const user = await prisma.user.create({
       data: {
-        firstName: req.body.firstName,
-        lastName: req.body.lastName,
-        phone: req.body.phone,
-        profileImage: req.body.profileImage
+        username,
+        email: email || null,
+        phone: phone || null,
+        password: hashedPassword,
+        firstName,
+        lastName,
+        role: role || 'CUSTOMER',
+        status: status || 'ACTIVE',
+        emailVerified: false,
+        phoneVerified: false,
       }
     });
-    const { password, ...userWithoutPassword } = user;
+    
+    // Create wallet for the user
+    await prisma.wallet.create({
+      data: {
+        userId: user.id,
+        balance: 0,
+        currency: 'ETB'
+      }
+    });
+    
+    const { password: _, ...userWithoutPassword } = user;
+    console.log(`✅ User created: ${user.id}`);
     res.json(userWithoutPassword);
   } catch (error) {
+    console.error('❌ Error creating user:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
-// Update user status/role (PATCH)
+// Update user (PUT - full update)
+app.put('/api/users/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { firstName, lastName, phone, profileImage, email } = req.body;
+    
+    console.log(`📝 PUT request for user: ${id}`);
+    
+    // Check if user exists
+    const existingUser = await prisma.user.findUnique({ where: { id } });
+    if (!existingUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // Prevent modifying SUPER_ADMIN unless by SUPER_ADMIN
+    if (existingUser.role === 'SUPER_ADMIN' && req.body.role !== 'SUPER_ADMIN') {
+      return res.status(403).json({ error: 'Cannot modify Super Admin account' });
+    }
+    
+    const user = await prisma.user.update({
+      where: { id },
+      data: {
+        ...(firstName && { firstName }),
+        ...(lastName && { lastName }),
+        ...(phone && { phone }),
+        ...(profileImage && { profileImage }),
+        ...(email && { email }),
+      }
+    });
+    
+    const { password, ...userWithoutPassword } = user;
+    console.log(`✅ User ${id} updated successfully`);
+    res.json(userWithoutPassword);
+  } catch (error) {
+    console.error('❌ Error updating user:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update user status/role (PATCH - partial update)
 app.patch('/api/users/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, role, firstName, lastName, email, phone } = req.body;
+    const { status, role, firstName, lastName, email, phone, profileImage } = req.body;
+    
+    console.log(`📝 PATCH request for user: ${id}`, req.body);
+    
+    // Check if user exists
+    const existingUser = await prisma.user.findUnique({ where: { id } });
+    if (!existingUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // Prevent modifying SUPER_ADMIN unless by SUPER_ADMIN
+    if (existingUser.role === 'SUPER_ADMIN' && role && role !== 'SUPER_ADMIN') {
+      return res.status(403).json({ error: 'Cannot change Super Admin role' });
+    }
+    
+    // Prevent suspending SUPER_ADMIN
+    if (existingUser.role === 'SUPER_ADMIN' && status === 'SUSPENDED') {
+      return res.status(403).json({ error: 'Cannot suspend Super Admin account' });
+    }
     
     const user = await prisma.user.update({
       where: { id },
@@ -287,13 +471,16 @@ app.patch('/api/users/:id', async (req, res) => {
         ...(lastName && { lastName }),
         ...(email && { email }),
         ...(phone && { phone }),
+        ...(profileImage && { profileImage }),
       }
     });
     
     const { password, ...userWithoutPassword } = user;
+    console.log(`✅ User ${id} updated successfully`);
     res.json(userWithoutPassword);
+    
   } catch (error) {
-    console.error('Error updating user:', error);
+    console.error('❌ Error updating user:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -303,40 +490,314 @@ app.delete('/api/users/:id', async (req, res) => {
   try {
     const { id } = req.params;
     
+    console.log(`🗑️ DELETE request received for user: ${id}`);
+    
     // Check if user exists
     const user = await prisma.user.findUnique({
-      where: { id }
+      where: { id },
+      include: {
+        merchant: true,
+        riderProfile: true,
+      }
     });
     
     if (!user) {
+      console.log(`❌ User ${id} not found`);
       return res.status(404).json({ error: 'User not found' });
     }
     
     // Prevent deleting SUPER_ADMIN
     if (user.role === 'SUPER_ADMIN') {
+      console.log(`⚠️ Attempted to delete SUPER_ADMIN: ${id}`);
       return res.status(403).json({ error: 'Cannot delete Super Admin account' });
     }
     
-    // Delete related records in transaction
-    await prisma.$transaction([
-      prisma.notification.deleteMany({ where: { userId: id } }),
-      prisma.notificationToken.deleteMany({ where: { userId: id } }),
-      prisma.activityLog.deleteMany({ where: { userId: id } }),
-      prisma.address.deleteMany({ where: { userId: id } }),
-      prisma.walletTransaction.deleteMany({ where: { wallet: { userId: id } } }),
-      prisma.wallet.deleteMany({ where: { userId: id } }),
-      prisma.review.deleteMany({ where: { userId: id } }),
-      prisma.reviewResponse.deleteMany({ where: { userId: id } }),
-      prisma.riderProfile.deleteMany({ where: { userId: id } }),
-      prisma.merchant.deleteMany({ where: { ownerId: id } }),
-      prisma.user.delete({ where: { id } }),
-    ]);
+    // Delete all related records in a transaction
+    await prisma.$transaction(async (tx) => {
+      // 1. Delete notifications
+      await tx.notification.deleteMany({ where: { userId: id } });
+      
+      // 2. Delete notification tokens
+      await tx.notificationToken.deleteMany({ where: { userId: id } });
+      
+      // 3. Delete activity logs
+      await tx.activityLog.deleteMany({ where: { userId: id } });
+      
+      // 4. Delete addresses
+      await tx.address.deleteMany({ where: { userId: id } });
+      
+      // 5. Delete wallet transactions
+      const wallet = await tx.wallet.findUnique({ where: { userId: id } });
+      if (wallet) {
+        await tx.walletTransaction.deleteMany({ where: { walletId: wallet.id } });
+        await tx.wallet.delete({ where: { userId: id } });
+      }
+      
+      // 6. Delete reviews and responses
+      await tx.reviewResponse.deleteMany({ where: { userId: id } });
+      await tx.review.deleteMany({ where: { userId: id } });
+      
+      // 7. Delete rider profile if exists
+      if (user.riderProfile) {
+        await tx.riderProfile.delete({ where: { userId: id } });
+      }
+      
+      // 8. Delete merchant if exists (this will cascade to products, orders, etc.)
+      if (user.merchant) {
+        // Delete merchant-related data
+        await tx.product.deleteMany({ where: { merchantId: user.merchant.id } });
+        await tx.productCategory.deleteMany({ where: { merchantId: user.merchant.id } });
+        await tx.order.deleteMany({ where: { merchantId: user.merchant.id } });
+        await tx.promotion.deleteMany({ where: { merchantId: user.merchant.id } });
+        await tx.inventoryItem.deleteMany({ where: { merchantId: user.merchant.id } });
+        await tx.merchant.delete({ where: { ownerId: id } });
+      }
+      
+      // 9. Delete orders placed by this user (if any remain)
+      await tx.orderItem.deleteMany({ where: { order: { customerId: id } } });
+      await tx.orderStatusHistory.deleteMany({ where: { order: { customerId: id } } });
+      await tx.payment.deleteMany({ where: { order: { customerId: id } } });
+      await tx.order.deleteMany({ where: { customerId: id } });
+      
+      // 10. Finally, delete the user
+      await tx.user.delete({ where: { id } });
+    });
     
-    console.log(`✅ User ${id} deleted successfully`);
+    console.log(`✅ User ${id} deleted successfully from database`);
     res.json({ success: true, message: 'User deleted successfully' });
     
   } catch (error) {
-    console.error('Error deleting user:', error);
+    console.error('❌ Error deleting user:', error);
+    
+    // Check for specific Prisma errors
+    if (error.code === 'P2003') {
+      return res.status(400).json({ 
+        error: 'Cannot delete user due to existing references. Please delete related records first.' 
+      });
+    }
+    
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Bulk delete users
+app.post('/api/users/bulk-delete', async (req, res) => {
+  try {
+    const { ids } = req.body;
+    
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'No user IDs provided' });
+    }
+    
+    console.log(`🗑️ Bulk delete request for ${ids.length} users`);
+    
+    const results = {
+      success: [],
+      failed: []
+    };
+    
+    for (const id of ids) {
+      try {
+        // Check if user exists and is not SUPER_ADMIN
+        const user = await prisma.user.findUnique({ where: { id } });
+        
+        if (!user) {
+          results.failed.push({ id, reason: 'User not found' });
+          continue;
+        }
+        
+        if (user.role === 'SUPER_ADMIN') {
+          results.failed.push({ id, reason: 'Cannot delete Super Admin' });
+          continue;
+        }
+        
+        // Delete user (using same logic as single delete)
+        await prisma.$transaction(async (tx) => {
+          await tx.notification.deleteMany({ where: { userId: id } });
+          await tx.notificationToken.deleteMany({ where: { userId: id } });
+          await tx.activityLog.deleteMany({ where: { userId: id } });
+          await tx.address.deleteMany({ where: { userId: id } });
+          
+          const wallet = await tx.wallet.findUnique({ where: { userId: id } });
+          if (wallet) {
+            await tx.walletTransaction.deleteMany({ where: { walletId: wallet.id } });
+            await tx.wallet.delete({ where: { userId: id } });
+          }
+          
+          await tx.reviewResponse.deleteMany({ where: { userId: id } });
+          await tx.review.deleteMany({ where: { userId: id } });
+          await tx.riderProfile.deleteMany({ where: { userId: id } });
+          await tx.merchant.deleteMany({ where: { ownerId: id } });
+          await tx.order.deleteMany({ where: { customerId: id } });
+          await tx.user.delete({ where: { id } });
+        });
+        
+        results.success.push(id);
+      } catch (error) {
+        results.failed.push({ id, reason: error.message });
+      }
+    }
+    
+    console.log(`✅ Bulk delete completed: ${results.success.length} success, ${results.failed.length} failed`);
+    res.json(results);
+    
+  } catch (error) {
+    console.error('❌ Error in bulk delete:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Bulk update user status
+app.post('/api/users/bulk-status', async (req, res) => {
+  try {
+    const { ids, status } = req.body;
+    
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'No user IDs provided' });
+    }
+    
+    if (!status) {
+      return res.status(400).json({ error: 'Status is required' });
+    }
+    
+    console.log(`📝 Bulk status update: ${ids.length} users to ${status}`);
+    
+    // Filter out SUPER_ADMIN users
+    const users = await prisma.user.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, role: true }
+    });
+    
+    const validIds = users
+      .filter(u => u.role !== 'SUPER_ADMIN')
+      .map(u => u.id);
+    
+    const result = await prisma.user.updateMany({
+      where: { id: { in: validIds } },
+      data: { status }
+    });
+    
+    console.log(`✅ Updated ${result.count} users to ${status}`);
+    res.json({ 
+      success: true, 
+      updated: result.count,
+      skipped: ids.length - validIds.length
+    });
+    
+  } catch (error) {
+    console.error('❌ Error in bulk status update:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get users by role
+app.get('/api/users/role/:role', async (req, res) => {
+  try {
+    const { role } = req.params;
+    
+    const users = await prisma.user.findMany({
+      where: { role: role.toUpperCase() },
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        phone: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        status: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+    
+    res.json(users);
+  } catch (error) {
+    console.error('❌ Error fetching users by role:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get users by status
+app.get('/api/users/status/:status', async (req, res) => {
+  try {
+    const { status } = req.params;
+    
+    const users = await prisma.user.findMany({
+      where: { status: status.toUpperCase() },
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        phone: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        status: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+    
+    res.json(users);
+  } catch (error) {
+    console.error('❌ Error fetching users by status:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Search users
+app.get('/api/users/search/:query', async (req, res) => {
+  try {
+    const { query } = req.params;
+    
+    const users = await prisma.user.findMany({
+      where: {
+        OR: [
+          { username: { contains: query, mode: 'insensitive' } },
+          { email: { contains: query, mode: 'insensitive' } },
+          { firstName: { contains: query, mode: 'insensitive' } },
+          { lastName: { contains: query, mode: 'insensitive' } },
+          { phone: { contains: query, mode: 'insensitive' } },
+        ]
+      },
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        phone: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        status: true,
+        createdAt: true,
+      },
+      take: 50,
+      orderBy: { createdAt: 'desc' }
+    });
+    
+    res.json(users);
+  } catch (error) {
+    console.error('❌ Error searching users:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get user activity logs
+app.get('/api/users/:userId/activity', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { limit = 50 } = req.query;
+    
+    const logs = await prisma.activityLog.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      take: parseInt(limit)
+    });
+    
+    res.json(logs);
+  } catch (error) {
+    console.error('❌ Error fetching user activity:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -1436,11 +1897,6 @@ const fetchPendingMerchants = async () => {
     setRefreshing(false);
   }
 };
-
-
-
-
-
 
 // ============================================
 // ADMIN STATS API
