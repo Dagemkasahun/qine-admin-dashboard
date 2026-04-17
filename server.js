@@ -1009,6 +1009,143 @@ app.get('/api/merchants/:id/stats', async (req, res) => {
 });
 
 // ============================================
+// MERCHANT API - ADD THESE ENDPOINTS
+// ============================================
+
+// Update merchant (PATCH - partial update)
+app.patch('/api/merchants/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, approvedAt, rejectionReason, businessName, description, address, city, businessPhone, businessEmail } = req.body;
+    
+    console.log(`📝 PATCH request for merchant: ${id}`, req.body);
+    
+    // Check if merchant exists
+    const existingMerchant = await prisma.merchant.findUnique({
+      where: { id }
+    });
+    
+    if (!existingMerchant) {
+      return res.status(404).json({ error: 'Merchant not found' });
+    }
+    
+    const merchant = await prisma.merchant.update({
+      where: { id },
+      data: {
+        ...(status && { status }),
+        ...(approvedAt && { approvedAt: new Date(approvedAt) }),
+        ...(rejectionReason && { rejectionReason }),
+        ...(businessName && { businessName }),
+        ...(description && { description }),
+        ...(address && { address }),
+        ...(city && { city }),
+        ...(businessPhone && { businessPhone }),
+        ...(businessEmail && { businessEmail }),
+      }
+    });
+    
+    console.log(`✅ Merchant ${id} updated successfully`);
+    res.json(merchant);
+    
+  } catch (error) {
+    console.error('❌ Error updating merchant:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Approve merchant (POST - dedicated endpoint)
+app.post('/api/merchants/:id/approve', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    console.log(`✅ Approving merchant: ${id}`);
+    
+    const merchant = await prisma.merchant.update({
+      where: { id },
+      data: {
+        status: 'ACTIVE',
+        approvedAt: new Date(),
+        approvedBy: req.body.adminId
+      }
+    });
+    
+    // Notify via WebSocket if needed
+    io.to(`merchant_${merchant.id}`).emit('notification', {
+      type: 'approval',
+      title: '✅ Merchant Approved!',
+      message: 'Your merchant account has been approved. You can now start selling!'
+    });
+    
+    console.log(`✅ Merchant ${id} approved successfully`);
+    res.json(merchant);
+    
+  } catch (error) {
+    console.error('❌ Error approving merchant:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Reject merchant (POST - dedicated endpoint)
+app.post('/api/merchants/:id/reject', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+    
+    console.log(`❌ Rejecting merchant: ${id}, reason: ${reason}`);
+    
+    const merchant = await prisma.merchant.update({
+      where: { id },
+      data: {
+        status: 'REJECTED',
+        rejectionReason: reason
+      }
+    });
+    
+    // Notify via WebSocket if needed
+    io.to(`merchant_${merchant.id}`).emit('notification', {
+      type: 'approval',
+      title: '❌ Application Rejected',
+      message: `Your application was rejected: ${reason}`
+    });
+    
+    console.log(`✅ Merchant ${id} rejected`);
+    res.json(merchant);
+    
+  } catch (error) {
+    console.error('❌ Error rejecting merchant:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get pending merchants
+app.get('/api/merchants/pending', async (req, res) => {
+  try {
+    const merchants = await prisma.merchant.findMany({
+      where: { 
+        status: { in: ['PENDING', 'PENDING_APPROVAL'] }
+      },
+      include: {
+        owner: {
+          select: { id: true, firstName: true, lastName: true, email: true, phone: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+    
+    console.log(`📋 Found ${merchants.length} pending merchants`);
+    res.json(merchants);
+    
+  } catch (error) {
+    console.error('❌ Error fetching pending merchants:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
+
+
+
+// ============================================
 // PRODUCT API
 // ============================================
 
