@@ -5,7 +5,9 @@ import {
   Store, Plus, Settings, Camera, X, Save, 
   Image as ImageIcon, Home, Bell, CheckCircle,
   MapPin, Package, Info, ShoppingBag, BarChart3,
-  Users, LogOut, Menu, XCircle, ArrowLeft, Upload
+  Users, LogOut, Menu, XCircle, ArrowLeft, Upload,
+  Phone, Mail, Globe, Clock, Calendar, Award, Target,
+  Heart, Share2, ExternalLink
 } from 'lucide-react';
 import { merchantApi } from '../api/merchants';
 
@@ -18,6 +20,7 @@ const MerchantPage = () => {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState('dashboard');
   
   // --- DATA STATE ---
   const [businessModel, setBusinessModel] = useState({
@@ -32,7 +35,31 @@ const MerchantPage = () => {
     phone: '',
     coverImage: null,
     logo: null,
-    joinedDate: ''
+    joinedDate: '',
+    // New fields for company profile
+    foundedYear: '',
+    employees: '',
+    website: '',
+    socialMedia: {
+      facebook: '',
+      instagram: '',
+      twitter: '',
+      linkedin: ''
+    },
+    businessHours: {
+      monday: { open: '09:00', close: '18:00', closed: false },
+      tuesday: { open: '09:00', close: '18:00', closed: false },
+      wednesday: { open: '09:00', close: '18:00', closed: false },
+      thursday: { open: '09:00', close: '18:00', closed: false },
+      friday: { open: '09:00', close: '18:00', closed: false },
+      saturday: { open: '10:00', close: '15:00', closed: false },
+      sunday: { open: '00:00', close: '00:00', closed: true }
+    },
+    achievements: [],
+    certifications: [],
+    managerName: '',
+    managerPhone: '',
+    managerEmail: ''
   });
 
   // Fetch merchant data
@@ -52,7 +79,30 @@ const MerchantPage = () => {
           phone: data.businessPhone,
           coverImage: data.coverImage,
           logo: data.logo,
-          joinedDate: new Date(data.createdAt).toLocaleDateString()
+          joinedDate: new Date(data.createdAt).toLocaleDateString(),
+          foundedYear: data.foundedYear || '2015',
+          employees: data.employees || '10-25',
+          website: data.website || '',
+          socialMedia: data.socialMedia || {
+            facebook: '',
+            instagram: '',
+            twitter: '',
+            linkedin: ''
+          },
+          businessHours: data.businessHours || businessModel.businessHours,
+          achievements: data.achievements || [
+            'Certified Ethiopian Exporters Association',
+            'ISO 22000:2018 Food Safety Certified',
+            'Best Organic Product Award 2023'
+          ],
+          certifications: data.certifications || [
+            'Organic Farming Certificate',
+            'Quality Management System ISO 9001',
+            'Fair Trade Certified'
+          ],
+          managerName: data.managerName || data.owner?.firstName + ' ' + data.owner?.lastName,
+          managerPhone: data.managerPhone || data.businessPhone,
+          managerEmail: data.managerEmail || data.businessEmail
         });
       } catch (error) {
         console.error('Error fetching merchant:', error);
@@ -64,14 +114,15 @@ const MerchantPage = () => {
     }
   }, [merchantId]);
 
-  // Navigation tabs
+  // Navigation tabs - Updated with Company Profile tab
   const navTabs = [
-    { path: '', label: 'Dashboard', icon: Home, exact: true },
-    { path: 'products', label: 'Products', icon: Package },
-    { path: 'inventory', label: 'Inventory', icon: Package },
-    { path: 'orders', label: 'Orders', icon: ShoppingBag },
-    { path: 'analytics', label: 'Analytics', icon: BarChart3 },
-    { path: 'staff', label: 'Staff', icon: Users },
+    { id: 'dashboard', path: '', label: 'Dashboard', icon: Home, exact: true },
+    { id: 'products', path: 'products', label: 'Products', icon: Package },
+    { id: 'inventory', path: 'inventory', label: 'Inventory', icon: Package },
+    { id: 'orders', path: 'orders', label: 'Orders', icon: ShoppingBag },
+    { id: 'analytics', path: 'analytics', label: 'Analytics', icon: BarChart3 },
+    { id: 'company', path: 'company', label: 'Company', icon: Info },
+    { id: 'staff', path: 'staff', label: 'Staff', icon: Users },
   ];
 
   // --- HANDLERS ---
@@ -88,6 +139,14 @@ const MerchantPage = () => {
         businessEmail: updatedData.email,
         logo: updatedData.logo,
         coverImage: updatedData.coverImage,
+        foundedYear: updatedData.foundedYear,
+        employees: updatedData.employees,
+        website: updatedData.website,
+        socialMedia: updatedData.socialMedia,
+        businessHours: updatedData.businessHours,
+        managerName: updatedData.managerName,
+        managerPhone: updatedData.managerPhone,
+        managerEmail: updatedData.managerEmail
       };
       
       await merchantApi.updateProfile(merchantId, updatePayload);
@@ -100,7 +159,15 @@ const MerchantPage = () => {
         phone: updatedData.phone,
         email: updatedData.email,
         logo: updatedData.logo,
-        coverImage: updatedData.coverImage
+        coverImage: updatedData.coverImage,
+        foundedYear: updatedData.foundedYear,
+        employees: updatedData.employees,
+        website: updatedData.website,
+        socialMedia: updatedData.socialMedia,
+        businessHours: updatedData.businessHours,
+        managerName: updatedData.managerName,
+        managerPhone: updatedData.managerPhone,
+        managerEmail: updatedData.managerEmail
       }));
       
       setIsProfileModalOpen(false);
@@ -124,7 +191,6 @@ const MerchantPage = () => {
     return location.pathname === `/merchant/${merchantId}/${path}`;
   };
 
-  // THIS RETURN MUST BE INSIDE THE COMPONENT FUNCTION
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
       {/* --- TOP NAVIGATION BAR --- */}
@@ -184,15 +250,18 @@ const MerchantPage = () => {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 lg:py-8">
-        {/* Business Header Card */}
+        {/* Business Header Card - Enhanced */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 mb-6 overflow-hidden">
           {/* Cover Image Area */}
-          <div className="h-32 sm:h-40 bg-gradient-to-r from-blue-50 to-indigo-50 relative group">
+          <div className="h-32 sm:h-48 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 relative group">
             {businessModel.coverImage ? (
               <img src={businessModel.coverImage} className="w-full h-full object-cover" alt="Cover" />
             ) : (
-              <div className="w-full h-full flex items-center justify-center">
-                <ImageIcon className="w-10 h-10 text-slate-300" />
+              <div className="w-full h-full flex items-center justify-center bg-gradient-to-r from-blue-600 to-indigo-600">
+                <div className="text-center">
+                  <Store className="w-12 h-12 text-white/30 mx-auto mb-2" />
+                  <p className="text-white/50 text-sm">Cover Image</p>
+                </div>
               </div>
             )}
             <button 
@@ -203,23 +272,23 @@ const MerchantPage = () => {
             </button>
           </div>
 
-          {/* Profile Details Area */}
+          {/* Profile Details Area - Enhanced with more info */}
           <div className="px-6 pb-6 -mt-10">
             <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
               <div className="flex items-end gap-4">
                 <div className="relative group/logo">
-                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-xl bg-white p-1 shadow-lg border border-slate-100">
+                  <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-white p-1 shadow-lg border border-slate-100">
                     {businessModel.logo ? (
-                      <img src={businessModel.logo} className="w-full h-full object-cover rounded-lg" alt="Logo" />
+                      <img src={businessModel.logo} className="w-full h-full object-cover rounded-xl" alt="Logo" />
                     ) : (
-                      <div className="w-full h-full rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-bold text-xl">
+                      <div className="w-full h-full rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-bold text-2xl">
                         {businessModel.name.charAt(0) || '?'}
                       </div>
                     )}
                   </div>
                   <button 
                     onClick={() => setIsProfileModalOpen(true)}
-                    className="absolute -bottom-1 -right-1 bg-white rounded-full p-1 shadow-md opacity-0 group-hover/logo:opacity-100 transition"
+                    className="absolute -bottom-1 -right-1 bg-white rounded-full p-1.5 shadow-md opacity-0 group-hover/logo:opacity-100 transition"
                   >
                     <Camera className="w-3 h-3 text-slate-500" />
                   </button>
@@ -235,6 +304,7 @@ const MerchantPage = () => {
                   <div className="flex flex-wrap gap-3 mt-1 text-[9px] font-bold text-slate-400 uppercase tracking-wider">
                     <span className="flex items-center gap-1"><MapPin className="w-3 h-3" /> {businessModel.location}</span>
                     <span className="flex items-center gap-1"><Package className="w-3 h-3" /> {businessModel.category}</span>
+                    <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> Est. {businessModel.foundedYear}</span>
                   </div>
                 </div>
               </div>
@@ -254,16 +324,37 @@ const MerchantPage = () => {
                 </button>
               </div>
             </div>
+
+            {/* Quick Stats Row */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-4 border-t border-slate-100">
+              <div className="text-center">
+                <p className="text-[10px] font-black text-slate-400 uppercase">Total Products</p>
+                <p className="text-lg font-bold text-slate-800">156</p>
+              </div>
+              <div className="text-center">
+                <p className="text-[10px] font-black text-slate-400 uppercase">Total Orders</p>
+                <p className="text-lg font-bold text-slate-800">1,234</p>
+              </div>
+              <div className="text-center">
+                <p className="text-[10px] font-black text-slate-400 uppercase">Rating</p>
+                <p className="text-lg font-bold text-yellow-500">★ 4.8</p>
+              </div>
+              <div className="text-center">
+                <p className="text-[10px] font-black text-slate-400 uppercase">Employees</p>
+                <p className="text-lg font-bold text-slate-800">{businessModel.employees}</p>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Tab Navigation */}
+        {/* Tab Navigation - Updated with Company tab */}
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm mb-6 overflow-x-auto">
           <div className="flex min-w-max">
             {navTabs.map((tab) => (
               <Link
-                key={tab.path || 'dashboard'}
+                key={tab.id}
                 to={`/merchant/${merchantId}/${tab.path}`}
+                onClick={() => setActiveTab(tab.id)}
                 className={`flex items-center gap-2 px-5 py-3.5 border-b-2 transition-all ${
                   isActiveTab(tab.path, tab.exact)
                     ? 'border-blue-600 text-blue-600'
@@ -296,7 +387,7 @@ const MerchantPage = () => {
             <nav className="space-y-1">
               {navTabs.map((tab) => (
                 <Link
-                  key={tab.path || 'dashboard'}
+                  key={tab.id}
                   to={`/merchant/${merchantId}/${tab.path}`}
                   onClick={() => setIsMobileMenuOpen(false)}
                   className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${
@@ -336,7 +427,7 @@ const MerchantPage = () => {
         </div>
       )}
 
-      {/* Profile Modal */}
+      {/* Profile Modal - Enhanced with company info fields */}
       {isProfileModalOpen && (
         <ProfileModal 
           businessModel={businessModel}
@@ -348,7 +439,7 @@ const MerchantPage = () => {
   );
 };
 
-// Profile Modal Component
+// Enhanced Profile Modal Component with Company Information
 const ProfileModal = ({ businessModel, onClose, onSave }) => {
   const [formData, setFormData] = useState({
     name: businessModel.name,
@@ -357,9 +448,31 @@ const ProfileModal = ({ businessModel, onClose, onSave }) => {
     phone: businessModel.phone,
     email: businessModel.email,
     coverImage: businessModel.coverImage,
-    logo: businessModel.logo
+    logo: businessModel.logo,
+    foundedYear: businessModel.foundedYear || '',
+    employees: businessModel.employees || '',
+    website: businessModel.website || '',
+    managerName: businessModel.managerName || '',
+    managerPhone: businessModel.managerPhone || '',
+    managerEmail: businessModel.managerEmail || '',
+    socialMedia: businessModel.socialMedia || {
+      facebook: '',
+      instagram: '',
+      twitter: '',
+      linkedin: ''
+    },
+    businessHours: businessModel.businessHours || {
+      monday: { open: '09:00', close: '18:00', closed: false },
+      tuesday: { open: '09:00', close: '18:00', closed: false },
+      wednesday: { open: '09:00', close: '18:00', closed: false },
+      thursday: { open: '09:00', close: '18:00', closed: false },
+      friday: { open: '09:00', close: '18:00', closed: false },
+      saturday: { open: '10:00', close: '15:00', closed: false },
+      sunday: { open: '00:00', close: '00:00', closed: true }
+    }
   });
   
+  const [activeTab, setActiveTab] = useState('basic');
   const [coverPreview, setCoverPreview] = useState(businessModel.coverImage);
   const [logoPreview, setLogoPreview] = useState(businessModel.logo);
   const coverInputRef = useRef(null);
@@ -390,6 +503,23 @@ const ProfileModal = ({ businessModel, onClose, onSave }) => {
     }
   };
 
+  const handleSocialMediaChange = (platform, value) => {
+    setFormData(prev => ({
+      ...prev,
+      socialMedia: { ...prev.socialMedia, [platform]: value }
+    }));
+  };
+
+  const handleBusinessHoursChange = (day, field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      businessHours: {
+        ...prev.businessHours,
+        [day]: { ...prev.businessHours[day], [field]: value }
+      }
+    }));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSaving(true);
@@ -404,7 +534,7 @@ const ProfileModal = ({ businessModel, onClose, onSave }) => {
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
+      <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl">
         <div className="sticky top-0 bg-white p-6 border-b border-slate-100 flex justify-between items-center">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-slate-100 rounded-lg">
@@ -417,118 +547,321 @@ const ProfileModal = ({ businessModel, onClose, onSave }) => {
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          {/* Cover Image Upload */}
-          <div>
-            <label className="text-xs font-bold uppercase text-slate-500 mb-2 block">Cover Image</label>
-            <div className="relative h-32 bg-slate-100 rounded-xl overflow-hidden group">
-              {coverPreview ? (
-                <img src={coverPreview} className="w-full h-full object-cover" alt="Cover" />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center">
-                  <ImageIcon className="w-8 h-8 text-slate-300" />
-                </div>
-              )}
+        {/* Tab Navigation inside Modal */}
+        <div className="border-b border-slate-100 px-6">
+          <div className="flex gap-4">
+            {['basic', 'company', 'contact', 'hours'].map((tab) => (
               <button
-                type="button"
-                onClick={() => coverInputRef.current?.click()}
-                className="absolute inset-0 bg-black/50 flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition"
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`py-3 px-2 font-medium text-sm transition-colors border-b-2 ${
+                  activeTab === tab
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-slate-500 hover:text-slate-700'
+                }`}
               >
-                <Camera className="w-5 h-5 text-white" />
-                <span className="text-white text-sm">Change Cover</span>
+                {tab === 'basic' && 'Basic Info'}
+                {tab === 'company' && 'Company Details'}
+                {tab === 'contact' && 'Contact & Social'}
+                {tab === 'hours' && 'Business Hours'}
               </button>
-              <input
-                ref={coverInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleCoverUpload}
-                className="hidden"
-              />
-            </div>
+            ))}
           </div>
+        </div>
 
-          {/* Logo Upload */}
-          <div>
-            <label className="text-xs font-bold uppercase text-slate-500 mb-2 block">Business Logo</label>
-            <div className="flex items-center gap-4">
-              <div className="w-20 h-20 bg-slate-100 rounded-xl overflow-hidden relative group">
-                {logoPreview ? (
-                  <img src={logoPreview} className="w-full h-full object-cover" alt="Logo" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <Store className="w-8 h-8 text-slate-300" />
+        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+          {/* Basic Info Tab */}
+          {activeTab === 'basic' && (
+            <>
+              {/* Cover Image Upload */}
+              <div>
+                <label className="text-xs font-bold uppercase text-slate-500 mb-2 block">Cover Image</label>
+                <div className="relative h-32 bg-slate-100 rounded-xl overflow-hidden group">
+                  {coverPreview ? (
+                    <img src={coverPreview} className="w-full h-full object-cover" alt="Cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <ImageIcon className="w-8 h-8 text-slate-300" />
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => coverInputRef.current?.click()}
+                    className="absolute inset-0 bg-black/50 flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition"
+                  >
+                    <Camera className="w-5 h-5 text-white" />
+                    <span className="text-white text-sm">Change Cover</span>
+                  </button>
+                  <input
+                    ref={coverInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleCoverUpload}
+                    className="hidden"
+                  />
+                </div>
+              </div>
+
+              {/* Logo Upload */}
+              <div>
+                <label className="text-xs font-bold uppercase text-slate-500 mb-2 block">Business Logo</label>
+                <div className="flex items-center gap-4">
+                  <div className="w-20 h-20 bg-slate-100 rounded-xl overflow-hidden relative group">
+                    {logoPreview ? (
+                      <img src={logoPreview} className="w-full h-full object-cover" alt="Logo" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Store className="w-8 h-8 text-slate-300" />
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => logoInputRef.current?.click()}
+                      className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
+                    >
+                      <Camera className="w-4 h-4 text-white" />
+                    </button>
+                    <input
+                      ref={logoInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleLogoUpload}
+                      className="hidden"
+                    />
                   </div>
-                )}
-                <button
-                  type="button"
-                  onClick={() => logoInputRef.current?.click()}
-                  className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
-                >
-                  <Camera className="w-4 h-4 text-white" />
-                </button>
-                <input
-                  ref={logoInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleLogoUpload}
-                  className="hidden"
+                  <p className="text-xs text-slate-400">Recommended: Square image, 200x200px</p>
+                </div>
+              </div>
+
+              {/* Business Info */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-bold uppercase text-slate-500 mb-1 block">Business Name *</label>
+                  <input 
+                    name="name" 
+                    value={formData.name}
+                    onChange={(e) => setFormData({...formData, name: e.target.value})}
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" 
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold uppercase text-slate-500 mb-1 block">Location</label>
+                  <input 
+                    value={formData.location}
+                    onChange={(e) => setFormData({...formData, location: e.target.value})}
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" 
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold uppercase text-slate-500 mb-1 block">Description</label>
+                <textarea 
+                  rows="4" 
+                  value={formData.description || ''}
+                  onChange={(e) => setFormData({...formData, description: e.target.value})}
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none resize-none" 
+                  placeholder="Tell customers about your business history, mission, and values..."
                 />
               </div>
-              <p className="text-xs text-slate-400">Recommended: Square image, 200x200px</p>
-            </div>
-          </div>
 
-          {/* Business Info */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-bold uppercase text-slate-500 mb-1 block">Business Name *</label>
-              <input 
-                name="name" 
-                value={formData.name}
-                onChange={(e) => setFormData({...formData, name: e.target.value})}
-                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" 
-              />
-            </div>
-            <div>
-              <label className="text-xs font-bold uppercase text-slate-500 mb-1 block">Location</label>
-              <input 
-                value={formData.location}
-                onChange={(e) => setFormData({...formData, location: e.target.value})}
-                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" 
-              />
-            </div>
-          </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-bold uppercase text-slate-500 mb-1 block">Email</label>
+                  <input 
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({...formData, email: e.target.value})}
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" 
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold uppercase text-slate-500 mb-1 block">Phone</label>
+                  <input 
+                    value={formData.phone}
+                    onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" 
+                  />
+                </div>
+              </div>
+            </>
+          )}
 
-          <div>
-            <label className="text-xs font-bold uppercase text-slate-500 mb-1 block">Description</label>
-            <textarea 
-              rows="3" 
-              value={formData.description}
-              onChange={(e) => setFormData({...formData, description: e.target.value})}
-              className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none resize-none" 
-            />
-          </div>
+          {/* Company Details Tab */}
+          {activeTab === 'company' && (
+            <>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-bold uppercase text-slate-500 mb-1 block">Founded Year</label>
+                  <input 
+                    type="number"
+                    value={formData.foundedYear}
+                    onChange={(e) => setFormData({...formData, foundedYear: e.target.value})}
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none"
+                    placeholder="e.g., 2015"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold uppercase text-slate-500 mb-1 block">Number of Employees</label>
+                  <select
+                    value={formData.employees}
+                    onChange={(e) => setFormData({...formData, employees: e.target.value})}
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none"
+                  >
+                    <option value="">Select range</option>
+                    <option value="1-10">1-10 employees</option>
+                    <option value="10-25">10-25 employees</option>
+                    <option value="25-50">25-50 employees</option>
+                    <option value="50-100">50-100 employees</option>
+                    <option value="100+">100+ employees</option>
+                  </select>
+                </div>
+              </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-bold uppercase text-slate-500 mb-1 block">Email</label>
-              <input 
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData({...formData, email: e.target.value})}
-                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" 
-              />
-            </div>
-            <div>
-              <label className="text-xs font-bold uppercase text-slate-500 mb-1 block">Phone</label>
-              <input 
-                value={formData.phone}
-                onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none" 
-              />
-            </div>
-          </div>
+              <div>
+                <label className="text-xs font-bold uppercase text-slate-500 mb-1 block">Website</label>
+                <input 
+                  type="url"
+                  value={formData.website}
+                  onChange={(e) => setFormData({...formData, website: e.target.value})}
+                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none"
+                  placeholder="https://www.example.com"
+                />
+              </div>
 
+              <div className="border-t border-slate-100 pt-4">
+                <h3 className="font-semibold text-slate-800 mb-3">Management Contact</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-bold uppercase text-slate-500 mb-1 block">Manager Name</label>
+                    <input 
+                      value={formData.managerName}
+                      onChange={(e) => setFormData({...formData, managerName: e.target.value})}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none"
+                      placeholder="Full name"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold uppercase text-slate-500 mb-1 block">Manager Phone</label>
+                    <input 
+                      value={formData.managerPhone}
+                      onChange={(e) => setFormData({...formData, managerPhone: e.target.value})}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none"
+                      placeholder="+251..."
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="text-xs font-bold uppercase text-slate-500 mb-1 block">Manager Email</label>
+                    <input 
+                      type="email"
+                      value={formData.managerEmail}
+                      onChange={(e) => setFormData({...formData, managerEmail: e.target.value})}
+                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none"
+                      placeholder="manager@example.com"
+                    />
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Contact & Social Tab */}
+          {activeTab === 'contact' && (
+            <>
+              <div>
+                <label className="text-xs font-bold uppercase text-slate-500 mb-2 block">Social Media Links</label>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-[#1877f2] rounded-lg flex items-center justify-center">
+                      <Globe className="w-4 h-4 text-white" />
+                    </div>
+                    <input
+                      value={formData.socialMedia.facebook}
+                      onChange={(e) => handleSocialMediaChange('facebook', e.target.value)}
+                      className="flex-1 p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none"
+                      placeholder="Facebook URL"
+                    />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-gradient-to-tr from-yellow-500 to-pink-500 rounded-lg flex items-center justify-center">
+                      <Globe className="w-4 h-4 text-white" />
+                    </div>
+                    <input
+                      value={formData.socialMedia.instagram}
+                      onChange={(e) => handleSocialMediaChange('instagram', e.target.value)}
+                      className="flex-1 p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none"
+                      placeholder="Instagram URL"
+                    />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-[#1da1f2] rounded-lg flex items-center justify-center">
+                      <Globe className="w-4 h-4 text-white" />
+                    </div>
+                    <input
+                      value={formData.socialMedia.twitter}
+                      onChange={(e) => handleSocialMediaChange('twitter', e.target.value)}
+                      className="flex-1 p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none"
+                      placeholder="Twitter URL"
+                    />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-[#0a66c2] rounded-lg flex items-center justify-center">
+                      <Globe className="w-4 h-4 text-white" />
+                    </div>
+                    <input
+                      value={formData.socialMedia.linkedin}
+                      onChange={(e) => handleSocialMediaChange('linkedin', e.target.value)}
+                      className="flex-1 p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none"
+                      placeholder="LinkedIn URL"
+                    />
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Business Hours Tab */}
+          {activeTab === 'hours' && (
+            <>
+              <div className="space-y-3">
+                {['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map((day) => (
+                  <div key={day} className="flex items-center gap-4 p-3 bg-slate-50 rounded-xl">
+                    <div className="w-24">
+                      <span className="font-semibold text-slate-700 capitalize">{day}</span>
+                    </div>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={formData.businessHours[day].closed}
+                        onChange={(e) => handleBusinessHoursChange(day, 'closed', e.target.checked)}
+                        className="rounded"
+                      />
+                      <span className="text-sm text-slate-500">Closed</span>
+                    </label>
+                    {!formData.businessHours[day].closed && (
+                      <>
+                        <input
+                          type="time"
+                          value={formData.businessHours[day].open}
+                          onChange={(e) => handleBusinessHoursChange(day, 'open', e.target.value)}
+                          className="p-2 bg-white border border-slate-200 rounded-lg outline-none"
+                        />
+                        <span>to</span>
+                        <input
+                          type="time"
+                          value={formData.businessHours[day].close}
+                          onChange={(e) => handleBusinessHoursChange(day, 'close', e.target.value)}
+                          className="p-2 bg-white border border-slate-200 rounded-lg outline-none"
+                        />
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* Submit Button */}
           <button 
             type="submit" 
             disabled={saving}

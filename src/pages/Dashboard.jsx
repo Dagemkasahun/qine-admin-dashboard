@@ -1,20 +1,22 @@
+// src/pages/Dashboard.jsx
 import { useState, useEffect, useContext } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Users, Store, Bike,
+  Users, Store, Bike, Package, ShoppingBag,
   DollarSign, Clock, CheckCircle, AlertTriangle,
-  ShoppingBag, Activity, Calendar,
-  ArrowUp, MoreHorizontal, Bell
+  Activity, Calendar, ArrowUp, MoreHorizontal, Bell,
+  TrendingUp, TrendingDown, Star, MapPin, Phone
 } from 'lucide-react';
 import {
-  BarChart, Bar,
-  AreaChart, Area, XAxis, YAxis, CartesianGrid,
-  Tooltip, Legend, ResponsiveContainer
+  BarChart, Bar, AreaChart, Area, XAxis, YAxis, 
+  CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
 import { useNotifications } from '../context/NotificationContext';
 import { ThemeContext } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
 
-const Dashboard = () => {
+// ==================== Admin Dashboard ====================
+const AdminDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({});
   const [recentOrders, setRecentOrders] = useState([]);
@@ -35,40 +37,18 @@ const Dashboard = () => {
       await new Promise(resolve => setTimeout(resolve, 1000));
 
       setStats({
-        revenue: {
-          today: 45678,
-          week: 324567,
-          month: 1456789,
-          growth: 23.5
-        },
-        orders: {
-          total: 3421,
-          pending: 23,
-          processing: 45,
-          delivered: 3128,
-          cancelled: 225
-        },
-        users: {
-          total: 15420,
-          active: 8234,
-          new: 156,
-          merchants: 41,
-          riders: 89
-        },
-        performance: {
-          avgDeliveryTime: 32,
-          onTimeRate: 94.2,
-          satisfaction: 4.6,
-          conversionRate: 3.2
-        }
+        revenue: { today: 45678, week: 324567, month: 1456789, growth: 23.5 },
+        orders: { total: 3421, pending: 23, processing: 45, delivered: 3128, cancelled: 225 },
+        users: { total: 15420, active: 8234, new: 156, merchants: 41, riders: 89 },
+        performance: { avgDeliveryTime: 32, onTimeRate: 94.2, satisfaction: 4.6, conversionRate: 3.2 }
       });
 
       setRecentOrders([
-        { id: 'ORD-001', customer: 'Abebe Kebede', amount: 1250, status: 'delivered', time: '5 min ago', items: 3, payment: 'paid' },
-        { id: 'ORD-002', customer: 'Sara Hailu', amount: 890, status: 'processing', time: '15 min ago', items: 2, payment: 'paid' },
-        { id: 'ORD-003', customer: 'Yonas Desta', amount: 2340, status: 'pending', time: '25 min ago', items: 5, payment: 'pending' },
-        { id: 'ORD-004', customer: 'Meron Tesfaye', amount: 560, status: 'delivered', time: '35 min ago', items: 1, payment: 'paid' },
-        { id: 'ORD-005', customer: 'Dawit Lemma', amount: 1870, status: 'cancelled', time: '45 min ago', items: 4, payment: 'refunded' }
+        { id: 'ORD-001', customer: 'Abebe Kebede', amount: 1250, status: 'delivered', time: '5 min ago', items: 3 },
+        { id: 'ORD-002', customer: 'Sara Hailu', amount: 890, status: 'processing', time: '15 min ago', items: 2 },
+        { id: 'ORD-003', customer: 'Yonas Desta', amount: 2340, status: 'pending', time: '25 min ago', items: 5 },
+        { id: 'ORD-004', customer: 'Meron Tesfaye', amount: 560, status: 'delivered', time: '35 min ago', items: 1 },
+        { id: 'ORD-005', customer: 'Dawit Lemma', amount: 1870, status: 'cancelled', time: '45 min ago', items: 4 }
       ]);
 
       setTopMerchants([
@@ -104,7 +84,6 @@ const Dashboard = () => {
       };
       return darkColors[status] || 'bg-slate-700 text-slate-300 border border-slate-600';
     }
-
     const lightColors = {
       pending: 'bg-yellow-100 text-yellow-800',
       processing: 'bg-blue-100 text-blue-800',
@@ -131,7 +110,6 @@ const Dashboard = () => {
     : 'bg-white border border-gray-200 text-gray-900';
 
   const mutedText = darkMode ? 'text-slate-400' : 'text-gray-600';
-  const softText = darkMode ? 'text-slate-300' : 'text-gray-700';
   const tableHead = darkMode ? 'bg-slate-900 text-slate-300' : 'bg-gray-50 text-gray-500';
   const hoverRow = darkMode ? 'hover:bg-slate-700/40' : 'hover:bg-gray-50';
   const divider = darkMode ? 'border-slate-700' : 'border-gray-200';
@@ -140,13 +118,9 @@ const Dashboard = () => {
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
       return (
-        <div
-          className={`rounded-lg border px-3 py-2 shadow-lg ${
-            darkMode
-              ? 'bg-slate-800 border-slate-700 text-white'
-              : 'bg-white border-gray-200 text-gray-900'
-          }`}
-        >
+        <div className={`rounded-lg border px-3 py-2 shadow-lg ${
+          darkMode ? 'bg-slate-800 border-slate-700 text-white' : 'bg-white border-gray-200 text-gray-900'
+        }`}>
           <p className="text-sm font-medium mb-1">{label}</p>
           {payload.map((entry, index) => (
             <p key={index} className="text-sm">
@@ -182,9 +156,9 @@ const Dashboard = () => {
       {/* Header */}
       <div className="flex justify-between items-center mb-6 flex-wrap gap-4">
         <div>
-          <h1 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>Dashboard</h1>
+          <h1 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>Admin Dashboard</h1>
           <p className={`${mutedText} mt-1`}>
-            Welcome back! Here's what's happening with your store today.
+            Welcome back! Here's what's happening with your platform today.
           </p>
         </div>
 
@@ -193,19 +167,14 @@ const Dashboard = () => {
             <Calendar className={`w-4 h-4 mr-2 ${mutedText}`} />
             <span className={`text-sm ${mutedText}`}>
               {new Date().toLocaleDateString('en-US', {
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric'
+                weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
               })}
             </span>
           </div>
 
           {unreadCount > 0 && (
             <div className={`px-4 py-2 rounded-lg flex items-center border ${
-              darkMode
-                ? 'bg-red-500/10 text-red-300 border-red-500/20'
-                : 'bg-red-100 text-red-800 border-red-200'
+              darkMode ? 'bg-red-500/10 text-red-300 border-red-500/20' : 'bg-red-100 text-red-800 border-red-200'
             }`}>
               <Bell className="w-4 h-4 mr-2" />
               <span className="text-sm font-medium">{unreadCount} new notifications</span>
@@ -214,7 +183,7 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* Stats */}
+      {/* Admin Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <div className={`${cardClass} rounded-lg shadow p-6 hover:shadow-lg transition`}>
           <div className="flex items-center justify-between mb-2">
@@ -222,8 +191,7 @@ const Dashboard = () => {
               <DollarSign className="w-6 h-6 text-green-500" />
             </div>
             <span className="flex items-center text-sm text-green-500">
-              <ArrowUp className="w-4 h-4 mr-1" />
-              {stats.revenue?.growth}%
+              <ArrowUp className="w-4 h-4 mr-1" />{stats.revenue?.growth}%
             </span>
           </div>
           <p className={`${mutedText} text-sm`}>Total Revenue</p>
@@ -239,7 +207,7 @@ const Dashboard = () => {
             <div className={`${darkMode ? 'bg-blue-500/20' : 'bg-blue-100'} p-2 rounded-lg`}>
               <ShoppingBag className="w-6 h-6 text-blue-500" />
             </div>
-            <Link to="/orders" className="text-blue-500 hover:text-blue-400 text-sm">
+            <Link to="/admin/orders" className="text-blue-500 hover:text-blue-400 text-sm">
               View all →
             </Link>
           </div>
@@ -257,8 +225,7 @@ const Dashboard = () => {
               <Users className="w-6 h-6 text-purple-500" />
             </div>
             <span className="flex items-center text-sm text-green-500">
-              <ArrowUp className="w-4 h-4 mr-1" />
-              +{stats.users?.new} today
+              <ArrowUp className="w-4 h-4 mr-1" />+{stats.users?.new} today
             </span>
           </div>
           <p className={`${mutedText} text-sm`}>Total Users</p>
@@ -275,8 +242,7 @@ const Dashboard = () => {
               <Clock className="w-6 h-6 text-orange-500" />
             </div>
             <span className="flex items-center text-sm text-green-500">
-              <CheckCircle className="w-4 h-4 mr-1" />
-              {stats.performance?.onTimeRate}% on time
+              <CheckCircle className="w-4 h-4 mr-1" />{stats.performance?.onTimeRate}% on time
             </span>
           </div>
           <p className={`${mutedText} text-sm`}>Avg. Delivery Time</p>
@@ -288,30 +254,49 @@ const Dashboard = () => {
         </div>
       </div>
 
+      {/* Role-specific Quick Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+        <div className={`${cardClass} rounded-lg p-4 text-center`}>
+          <p className={`${mutedText} text-xs`}>Pending Approvals</p>
+          <p className="text-xl font-bold text-yellow-500">3</p>
+          <Link to="/admin/approvals" className="text-blue-500 text-xs hover:underline">Review →</Link>
+        </div>
+        <div className={`${cardClass} rounded-lg p-4 text-center`}>
+          <p className={`${mutedText} text-xs`}>Active Riders</p>
+          <p className="text-xl font-bold text-green-500">{stats.users?.riders || 89}</p>
+        </div>
+        <div className={`${cardClass} rounded-lg p-4 text-center`}>
+          <p className={`${mutedText} text-xs`}>Total Merchants</p>
+          <p className="text-xl font-bold text-blue-500">{stats.users?.merchants || 41}</p>
+        </div>
+        <div className={`${cardClass} rounded-lg p-4 text-center`}>
+          <p className={`${mutedText} text-xs`}>Today's Orders</p>
+          <p className="text-xl font-bold text-purple-500">156</p>
+        </div>
+        <div className={`${cardClass} rounded-lg p-4 text-center`}>
+          <p className={`${mutedText} text-xs`}>System Health</p>
+          <p className="text-xl font-bold text-emerald-500">98.5%</p>
+        </div>
+      </div>
+
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         <div className={`${cardClass} rounded-lg shadow p-6`}>
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-lg font-semibold">Revenue Overview</h2>
             <select className={`text-sm rounded-lg px-3 py-1 border ${
-              darkMode
-                ? 'bg-slate-900 border-slate-700 text-white'
-                : 'bg-white border-gray-300 text-gray-800'
+              darkMode ? 'bg-slate-900 border-slate-700 text-white' : 'bg-white border-gray-300 text-gray-800'
             }`}>
               <option>This Week</option>
               <option>This Month</option>
-              <option>This Quarter</option>
               <option>This Year</option>
             </select>
           </div>
           <ResponsiveContainer width="100%" height={300}>
             <AreaChart data={[
-              { day: 'Mon', revenue: 45000 },
-              { day: 'Tue', revenue: 52000 },
-              { day: 'Wed', revenue: 48000 },
-              { day: 'Thu', revenue: 61000 },
-              { day: 'Fri', revenue: 58000 },
-              { day: 'Sat', revenue: 63000 },
+              { day: 'Mon', revenue: 45000 }, { day: 'Tue', revenue: 52000 },
+              { day: 'Wed', revenue: 48000 }, { day: 'Thu', revenue: 61000 },
+              { day: 'Fri', revenue: 58000 }, { day: 'Sat', revenue: 63000 },
               { day: 'Sun', revenue: 67000 }
             ]}>
               <defs>
@@ -333,9 +318,9 @@ const Dashboard = () => {
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-lg font-semibold">Orders Overview</h2>
             <div className="flex space-x-2">
-              <span className="flex items-center text-xs"><span className="w-2 h-2 bg-yellow-400 rounded-full mr-1"></span> Pending</span>
-              <span className="flex items-center text-xs"><span className="w-2 h-2 bg-blue-400 rounded-full mr-1"></span> Processing</span>
-              <span className="flex items-center text-xs"><span className="w-2 h-2 bg-green-400 rounded-full mr-1"></span> Delivered</span>
+              <span className="flex items-center text-xs"><span className="w-2 h-2 bg-yellow-400 rounded-full mr-1"></span>Pending</span>
+              <span className="flex items-center text-xs"><span className="w-2 h-2 bg-blue-400 rounded-full mr-1"></span>Processing</span>
+              <span className="flex items-center text-xs"><span className="w-2 h-2 bg-green-400 rounded-full mr-1"></span>Delivered</span>
             </div>
           </div>
           <ResponsiveContainer width="100%" height={300}>
@@ -366,7 +351,7 @@ const Dashboard = () => {
         <div className={`${cardClass} rounded-lg shadow`}>
           <div className={`px-6 py-4 border-b ${divider} flex justify-between items-center`}>
             <h2 className="text-lg font-semibold">Recent Orders</h2>
-            <Link to="/orders" className="text-blue-500 hover:text-blue-400 text-sm">View all →</Link>
+            <Link to="/admin/orders" className="text-blue-500 hover:text-blue-400 text-sm">View all →</Link>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -421,8 +406,7 @@ const Dashboard = () => {
                 <div className="text-right">
                   <p className="font-bold text-green-500">ETB {merchant.revenue.toLocaleString()}</p>
                   <p className="text-xs text-green-500 flex items-center justify-end">
-                    <ArrowUp className="w-3 h-3 mr-1" />
-                    {merchant.growth}% growth
+                    <ArrowUp className="w-3 h-3 mr-1" />{merchant.growth}% growth
                   </p>
                 </div>
               </div>
@@ -431,7 +415,7 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* Activities */}
+      {/* Recent Activities */}
       <div className={`${cardClass} rounded-lg shadow`}>
         <div className={`px-6 py-4 border-b ${divider}`}>
           <h2 className="text-lg font-semibold">Recent Activities</h2>
@@ -458,7 +442,6 @@ const Dashboard = () => {
           <button className="bg-blue-600 text-white p-4 rounded-full shadow-lg hover:bg-blue-700 transition">
             <MoreHorizontal className="w-6 h-6" />
           </button>
-
           <div className={`absolute bottom-full right-0 mb-2 w-48 rounded-lg shadow-lg border hidden group-hover:block ${
             darkMode ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'
           }`}>
@@ -481,6 +464,212 @@ const Dashboard = () => {
       </div>
     </div>
   );
+};
+
+// ==================== Merchant Dashboard ====================
+const MerchantDashboardView = () => {
+  const { darkMode } = useContext(ThemeContext);
+  const { user } = useAuth();
+  const [stats, setStats] = useState({
+    totalRevenue: 142850,
+    totalOrders: 384,
+    activeOrders: 12,
+    avgRating: 4.6,
+    totalProducts: 45,
+    lowStockCount: 3
+  });
+
+  const cardClass = darkMode
+    ? 'bg-slate-800 border border-slate-700 text-white'
+    : 'bg-white border border-gray-200 text-gray-900';
+
+  const mutedText = darkMode ? 'text-slate-400' : 'text-gray-600';
+  const pageBg = darkMode ? 'bg-slate-900' : 'bg-gray-50';
+
+  const statCards = [
+    { label: 'Total Revenue', value: `ETB ${stats.totalRevenue.toLocaleString()}`, icon: DollarSign, color: 'text-green-500', bg: darkMode ? 'bg-green-500/20' : 'bg-green-100', trend: '+12.5%' },
+    { label: 'Total Orders', value: stats.totalOrders.toString(), icon: ShoppingBag, color: 'text-blue-500', bg: darkMode ? 'bg-blue-500/20' : 'bg-blue-100', trend: '+8.3%' },
+    { label: 'Active Orders', value: stats.activeOrders.toString(), icon: Clock, color: 'text-orange-500', bg: darkMode ? 'bg-orange-500/20' : 'bg-orange-100', trend: `${stats.activeOrders} pending` },
+    { label: 'Avg. Rating', value: `${stats.avgRating}/5`, icon: Star, color: 'text-yellow-500', bg: darkMode ? 'bg-yellow-500/20' : 'bg-yellow-100', trend: '★★★★☆' },
+  ];
+
+  return (
+    <div className={`p-6 min-h-screen ${pageBg}`}>
+      <div className="mb-6">
+        <h1 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>
+          Welcome back, {user?.firstName || 'Merchant'}!
+        </h1>
+        <p className={`${mutedText} mt-1`}>Here's what's happening with your store today.</p>
+      </div>
+
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        {statCards.map((stat, index) => (
+          <div key={index} className={`${cardClass} rounded-lg shadow p-6 hover:shadow-lg transition`}>
+            <div className="flex items-center justify-between mb-2">
+              <div className={`${stat.bg} p-2 rounded-lg`}>
+                <stat.icon className={`w-6 h-6 ${stat.color}`} />
+              </div>
+              <span className="flex items-center text-sm text-green-500">
+                <TrendingUp className="w-4 h-4 mr-1" />{stat.trend}
+              </span>
+            </div>
+            <p className={`${mutedText} text-sm`}>{stat.label}</p>
+            <p className="text-2xl font-bold">{stat.value}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Quick Actions */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        {[
+          { label: 'Add Product', path: 'products', color: 'bg-blue-600', icon: Package },
+          { label: 'View Orders', path: 'orders', color: 'bg-green-600', icon: ShoppingBag },
+          { label: 'Manage Stock', path: 'inventory', color: 'bg-purple-600', icon: Package },
+          { label: 'Analytics', path: 'analytics', color: 'bg-orange-600', icon: TrendingUp },
+        ].map((action, idx) => (
+          <Link
+            key={idx}
+            to={action.path}
+            className={`${action.color} text-white rounded-xl p-4 text-center hover:opacity-90 transition shadow-sm`}
+          >
+            <action.icon className="w-6 h-6 mx-auto mb-2" />
+            <span className="text-xs font-bold uppercase tracking-wider">{action.label}</span>
+          </Link>
+        ))}
+      </div>
+
+      {/* Alerts */}
+      {stats.lowStockCount > 0 && (
+        <div className={`${cardClass} rounded-lg shadow p-6 mb-8 border-l-4 border-yellow-500`}>
+          <div className="flex items-center">
+            <AlertTriangle className="w-6 h-6 text-yellow-500 mr-3" />
+            <div>
+              <h3 className="font-semibold">Low Stock Alert</h3>
+              <p className={`${mutedText} text-sm`}>
+                You have {stats.lowStockCount} products running low on stock.
+                <Link to="inventory" className="text-blue-500 ml-2 hover:underline">Review Inventory →</Link>
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Recent Orders Placeholder */}
+      <div className={`${cardClass} rounded-lg shadow p-6`}>
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-lg font-semibold">Recent Orders</h2>
+          <Link to="orders" className="text-blue-500 hover:text-blue-400 text-sm">View all →</Link>
+        </div>
+        <p className={`${mutedText} text-center py-8`}>Loading recent orders...</p>
+      </div>
+    </div>
+  );
+};
+
+// ==================== Rider Dashboard ====================
+const RiderDashboardView = () => {
+  const { darkMode } = useContext(ThemeContext);
+  const { user } = useAuth();
+  const [stats] = useState({
+    todayDeliveries: 8,
+    totalEarnings: 1250,
+    rating: 4.8,
+    onlineStatus: true
+  });
+
+  const cardClass = darkMode
+    ? 'bg-slate-800 border border-slate-700 text-white'
+    : 'bg-white border border-gray-200 text-gray-900';
+
+  const mutedText = darkMode ? 'text-slate-400' : 'text-gray-600';
+  const pageBg = darkMode ? 'bg-slate-900' : 'bg-gray-50';
+
+  return (
+    <div className={`p-6 min-h-screen ${pageBg}`}>
+      <div className="mb-6">
+        <h1 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-gray-800'}`}>
+          Welcome back, {user?.firstName || 'Rider'}!
+        </h1>
+        <p className={`${mutedText} mt-1`}>Ready for your next delivery?</p>
+      </div>
+
+      {/* Status Toggle */}
+      <div className={`${cardClass} rounded-lg shadow p-6 mb-8`}>
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-semibold text-lg">Your Status</h3>
+            <p className={`${mutedText}`}>
+              {stats.onlineStatus ? 'You are online and can receive orders' : 'You are offline'}
+            </p>
+          </div>
+          <button className={`px-6 py-3 rounded-lg font-medium ${
+            stats.onlineStatus 
+              ? 'bg-green-500 text-white' 
+              : 'bg-gray-500 text-white'
+          }`}>
+            {stats.onlineStatus ? 'Go Offline' : 'Go Online'}
+          </button>
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className={`${cardClass} rounded-lg shadow p-6`}>
+          <div className="flex items-center mb-2">
+            <Package className="w-6 h-6 text-blue-500 mr-2" />
+            <p className={`${mutedText} text-sm`}>Today's Deliveries</p>
+          </div>
+          <p className="text-3xl font-bold">{stats.todayDeliveries}</p>
+        </div>
+
+        <div className={`${cardClass} rounded-lg shadow p-6`}>
+          <div className="flex items-center mb-2">
+            <DollarSign className="w-6 h-6 text-green-500 mr-2" />
+            <p className={`${mutedText} text-sm`}>Today's Earnings</p>
+          </div>
+          <p className="text-3xl font-bold">ETB {stats.totalEarnings}</p>
+        </div>
+
+        <div className={`${cardClass} rounded-lg shadow p-6`}>
+          <div className="flex items-center mb-2">
+            <Star className="w-6 h-6 text-yellow-500 mr-2" />
+            <p className={`${mutedText} text-sm`}>Your Rating</p>
+          </div>
+          <p className="text-3xl font-bold">{stats.rating} ★</p>
+        </div>
+      </div>
+
+      {/* Available Orders */}
+      <div className={`${cardClass} rounded-lg shadow p-6`}>
+        <h2 className="text-lg font-semibold mb-4">Available Orders</h2>
+        <p className={`${mutedText} text-center py-8`}>No available orders at the moment</p>
+      </div>
+    </div>
+  );
+};
+
+// ==================== Main Dashboard Component ====================
+const Dashboard = () => {
+  const { user } = useAuth();
+
+  // Render different dashboard based on user role
+  if (!user) {
+    return <div>Loading...</div>;
+  }
+
+  switch (user.role) {
+    case 'ADMIN':
+      return <AdminDashboard />;
+    case 'MERCHANT':
+      return <MerchantDashboardView />;
+    case 'RIDER':
+      return <RiderDashboardView />;
+    case 'CUSTOMER':
+      return <div>Customer Dashboard Coming Soon</div>;
+    default:
+      return <AdminDashboard />;
+  }
 };
 
 export default Dashboard;

@@ -1,0 +1,148 @@
+{
+  "general": {
+    "siteName": "QINE Admin",
+    "siteDescription": "Super App Administration Dashboard",
+    "language": "en",
+    "timezone": "Africa/Addis_Ababa",
+    "dateFormat": "DD/MM/YYYY",
+    "timeFormat": "12h",
+    "currency": "ETB",
+    "currencySymbol": "ETB",
+    "currencyPosition": "before"
+  },
+  "appearance": {
+    "theme": "light",
+    "primaryColor": "#3B82F6",
+    "secondaryColor": "#8B5CF6",
+    "accentColor": "#10B981",
+    "sidebarCollapsed": false,
+    "layout": "default",
+    "fontFamily": "Inter",
+    "fontSize": "medium",
+    "borderRadius": "medium",
+    "animations": true
+  },
+  "notifications": {
+    "emailNotifications": true,
+    "pushNotifications": true,
+    "smsNotifications": false,
+    "orderAlerts": true,
+    "merchantAlerts": true,
+    "riderAlerts": true,
+    "systemAlerts": true,
+    "marketingEmails": false,
+    "dailyDigest": true,
+    "weeklyReport": true,
+    "monthlyReport": false,
+    "alertThresholds": {
+      "lowStock": 10,
+      "pendingOrders": 20,
+      "inactiveMerchants": 7,
+      "offlineRiders": 5
+    }
+  },
+  "api": {
+    "baseUrl": "https://qine-backend.onrender.com/api",
+    "timeout": 30000,
+    "retryAttempts": 3,
+    "enableCache": true,
+    "cacheTTL": 300,
+    "rateLimit": 100,
+    "webhookUrl": "",
+    "webhookSecret": ""
+  },
+  "database": {
+    "host": "supabase",
+    "port": 5432,
+    "name": "qine_db",
+    "status": "Connected",
+    "version": "PostgreSQL 15.1",
+    "size": "2.4 GB",
+    "tables": 24,
+    "connections": 8,
+    "lastBackup": "2024-03-15 02:00:00"
+  },
+  "server": {
+    "uptime": "14d 6h 32m",
+    "memoryUsage": "2.1 GB / 8 GB",
+    "cpuLoad": "23%",
+    "activeConnections": 47,
+    "rateLimitingEnabled": true,
+    "webSocketStatus": "Connected",
+    "webSocketUrl": "wss://qine-backend.onrender.com"
+  },
+  "security": {
+    "sessionTimeout": 3600,
+    "maxLoginAttempts": 5,
+    "lockoutDuration": 15,
+    "twoFactorAuth": false,
+    "ipWhitelist": "",
+    "passwordPolicy": {
+      "minLength": 8,
+      "requireUppercase": true,
+      "requireLowercase": true,
+      "requireNumbers": true,
+      "requireSpecial": true,
+      "expiryDays": 90,
+      "preventReuse": 5
+    },
+    "auditLog": true,
+    "encryptionLevel": "AES-256"
+  },
+  "payment": {
+    "providers": {
+      "cbe": { "enabled": true, "apiKey": "", "merchantId": "" },
+      "telebirr": { "enabled": false, "apiKey": "", "merchantId": "" },
+      "amole": { "enabled": false, "apiKey": "", "merchantId": "" }
+    },
+    "commissionRates": {
+      "default": 10,
+      "restaurant": 15,
+      "product": 10,
+      "service": 5
+    },
+    "payoutSchedule": "weekly",
+    "minimumPayout": 100,
+    "autoApprovePayouts": false
+  },
+  "email": {
+    "provider": "smtp",
+    "fromEmail": "noreply@qine.com",
+    "fromName": "QINE Admin",
+    "smtp": {
+      "host": "smtp.gmail.com",
+      "port": 587,
+      "secure": false,
+      "username": "",
+      "password": ""
+    },
+    "templates": {
+      "welcome": true,
+      "orderConfirmation": true,
+      "passwordReset": true,
+      "merchantApproval": true
+    }
+  },
+  "sms": {
+    "provider": "twilio",
+    "fromNumber": "",
+    "accountSid": "",
+    "authToken": "",
+    "enabled": false
+  },
+  "backup": {
+    "autoBackup": true,
+    "backupFrequency": "daily",
+    "backupTime": "02:00",
+    "retentionDays": 30,
+    "includeFiles": true,
+    "backupLocation": "cloud"
+  },
+  "system": {
+    "maintenanceMode": false,
+    "debugMode": false,
+    "logLevel": "info",
+    "maxUploadSize": 10,
+    "allowedFileTypes": "jpg,png,pdf,doc,docx"
+  }
+}
