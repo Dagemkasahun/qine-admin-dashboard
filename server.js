@@ -210,6 +210,7 @@ app.get('/api/users', async (req, res) => {
     const users = await prisma.user.findMany({
       select: {
         id: true,
+        username: true,
         email: true,
         phone: true,
         firstName: true,
@@ -220,10 +221,12 @@ app.get('/api/users', async (req, res) => {
         addresses: true,
         merchant: true,
         riderProfile: true
-      }
+      },
+      orderBy: { createdAt: 'desc' }
     });
     res.json(users);
   } catch (error) {
+    console.error('Error fetching users:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -250,7 +253,7 @@ app.get('/api/users/:id', async (req, res) => {
   }
 });
 
-// Update user
+// Update user (PUT)
 app.put('/api/users/:id', async (req, res) => {
   try {
     const user = await prisma.user.update({
@@ -268,6 +271,76 @@ app.put('/api/users/:id', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+// Update user status/role (PATCH)
+app.patch('/api/users/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, role, firstName, lastName, email, phone } = req.body;
+    
+    const user = await prisma.user.update({
+      where: { id },
+      data: {
+        ...(status && { status }),
+        ...(role && { role }),
+        ...(firstName && { firstName }),
+        ...(lastName && { lastName }),
+        ...(email && { email }),
+        ...(phone && { phone }),
+      }
+    });
+    
+    const { password, ...userWithoutPassword } = user;
+    res.json(userWithoutPassword);
+  } catch (error) {
+    console.error('Error updating user:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete user
+app.delete('/api/users/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Check if user exists
+    const user = await prisma.user.findUnique({
+      where: { id }
+    });
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // Prevent deleting SUPER_ADMIN
+    if (user.role === 'SUPER_ADMIN') {
+      return res.status(403).json({ error: 'Cannot delete Super Admin account' });
+    }
+    
+    // Delete related records in transaction
+    await prisma.$transaction([
+      prisma.notification.deleteMany({ where: { userId: id } }),
+      prisma.notificationToken.deleteMany({ where: { userId: id } }),
+      prisma.activityLog.deleteMany({ where: { userId: id } }),
+      prisma.address.deleteMany({ where: { userId: id } }),
+      prisma.walletTransaction.deleteMany({ where: { wallet: { userId: id } } }),
+      prisma.wallet.deleteMany({ where: { userId: id } }),
+      prisma.review.deleteMany({ where: { userId: id } }),
+      prisma.reviewResponse.deleteMany({ where: { userId: id } }),
+      prisma.riderProfile.deleteMany({ where: { userId: id } }),
+      prisma.merchant.deleteMany({ where: { ownerId: id } }),
+      prisma.user.delete({ where: { id } }),
+    ]);
+    
+    console.log(`✅ User ${id} deleted successfully`);
+    res.json({ success: true, message: 'User deleted successfully' });
+    
+  } catch (error) {
+    console.error('Error deleting user:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 
 // ============================================
 // MERCHANT API
@@ -1197,6 +1270,177 @@ app.get('/api/reports/sales', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+
+
+app.get('/api/merchants/pending', async (req, res) => {
+  try {
+    const merchants = await prisma.merchant.findMany({
+      where: { 
+        status: { in: ['PENDING', 'PENDING_APPROVAL'] }
+      },
+      include: {
+        owner: {
+          select: { id: true, firstName: true, lastName: true, email: true, phone: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+    res.json(merchants);
+  } catch (error) {
+    console.error('Error fetching pending merchants:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
+// ============================================
+// SETTINGS API
+// ============================================
+
+// Get all settings
+app.get('/api/settings', async (req, res) => {
+  try {
+    const settings = await prisma.systemSetting.findMany({
+      orderBy: { category: 'asc' }
+    });
+    
+    // Convert to object format
+    const settingsObject = {
+      general: {},
+      appearance: {},
+      notifications: {},
+      api: {},
+      database: {},
+      security: {},
+      payment: {},
+      email: {},
+      sms: {},
+      backup: {},
+      system: {}
+    };
+    
+    settings.forEach(setting => {
+      let value;
+      try {
+        value = JSON.parse(setting.value);
+      } catch {
+        value = setting.value;
+      }
+      
+      if (settingsObject[setting.category.toLowerCase()]) {
+        settingsObject[setting.category.toLowerCase()][setting.key] = value;
+      }
+    });
+    
+    res.json(settingsObject);
+  } catch (error) {
+    console.error('Error fetching settings:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Save settings
+app.post('/api/settings', async (req, res) => {
+  try {
+    const settings = req.body;
+    const operations = [];
+    
+    // Flatten and save each setting
+    for (const [category, categorySettings] of Object.entries(settings)) {
+      if (typeof categorySettings === 'object') {
+        for (const [key, value] of Object.entries(categorySettings)) {
+          operations.push(
+            prisma.systemSetting.upsert({
+              where: { key },
+              update: { 
+                value: JSON.stringify(value),
+                category: category.toUpperCase()
+              },
+              create: {
+                key,
+                value: JSON.stringify(value),
+                type: typeof value === 'number' ? 'NUMBER' : 
+                      typeof value === 'boolean' ? 'BOOLEAN' : 'STRING',
+                category: category.toUpperCase()
+              }
+            })
+          );
+        }
+      }
+    }
+    
+    await prisma.$transaction(operations);
+    
+    res.json({ success: true, message: 'Settings saved successfully' });
+  } catch (error) {
+    console.error('Error saving settings:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get single setting
+app.get('/api/settings/:key', async (req, res) => {
+  try {
+    const setting = await prisma.systemSetting.findUnique({
+      where: { key: req.params.key }
+    });
+    
+    if (!setting) {
+      return res.status(404).json({ error: 'Setting not found' });
+    }
+    
+    res.json(setting);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update single setting
+app.put('/api/settings/:key', async (req, res) => {
+  try {
+    const setting = await prisma.systemSetting.update({
+      where: { key: req.params.key },
+      data: {
+        value: JSON.stringify(req.body.value)
+      }
+    });
+    
+    res.json(setting);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+const fetchPendingMerchants = async () => {
+  setLoading(true);
+  try {
+    // Use the dedicated pending endpoint
+    const response = await apiClient.get('/merchants/pending');
+    setPendingMerchants(response.data);
+  } catch (error) {
+    console.error('Error fetching pending merchants:', error);
+    // Fallback to filtering all merchants
+    try {
+      const response = await apiClient.get('/merchants');
+      const pending = response.data.filter(m => 
+        m.status === 'PENDING' || m.status === 'PENDING_APPROVAL'
+      );
+      setPendingMerchants(pending);
+    } catch (fallbackError) {
+      console.error('Fallback also failed:', fallbackError);
+      setPendingMerchants([]);
+    }
+  } finally {
+    setLoading(false);
+    setRefreshing(false);
+  }
+};
+
+
+
+
+
 
 // ============================================
 // ADMIN STATS API
