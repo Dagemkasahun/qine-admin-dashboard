@@ -1,182 +1,178 @@
-// src/pages/Orders.jsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Filter } from 'lucide-react';
+import { Search, Filter, RefreshCw } from 'lucide-react';
+import apiClient from '../api/client';
 
 const Orders = () => {
   const navigate = useNavigate();
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [search, setSearch] = useState("");
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [editOrder, setEditOrder] = useState(null);
 
-  const [orders, setOrders] = useState([
-    { 
-      id: '#1234', 
-      customer: 'Abebe Kebede', 
-      merchant: 'Restaurant A', 
-      amount: 450, 
-      status: 'delivered', 
-      time: '10:30 AM',
-      date: '2026-03-10',
-      items: 3,
-      customerEmail: 'abebe@example.com',
-      customerName: 'Abebe Kebede',
-      address: 'Bole, Addis Ababa',
-      itemsList: [{ name: 'Burger', quantity: 2 }, { name: 'Fries', quantity: 1 }]
-    },
-    { 
-      id: '#1235', 
-      customer: 'Sara Hailu', 
-      merchant: 'Supermarket B', 
-      amount: 890, 
-      status: 'pending', 
-      time: '11:15 AM',
-      date: '2026-03-10',
-      items: 5,
-      customerEmail: 'sara@example.com',
-      customerName: 'Sara Hailu',
-      address: 'Piassa, Addis Ababa',
-      itemsList: [{ name: 'Milk', quantity: 4 }, { name: 'Bread', quantity: 1 }]
-    },
-    { 
-      id: '#1236', 
-      customer: 'Yonas Desta', 
-      merchant: 'Pharmacy C', 
-      amount: 230, 
-      status: 'in-progress', 
-      time: '11:45 AM',
-      date: '2026-03-10',
-      items: 2,
-      customerEmail: 'yonas@example.com',
-      customerName: 'Yonas Desta',
-      address: 'CMC, Addis Ababa',
-      itemsList: [{ name: 'Paracetamol', quantity: 1 }, { name: 'Mask', quantity: 1 }]
-    },
-    { 
-      id: '#1237', 
-      customer: 'Meron T.', 
-      merchant: 'Restaurant D', 
-      amount: 670, 
-      status: 'cancelled', 
-      time: '12:00 PM',
-      date: '2026-03-10',
-      items: 4,
-      customerEmail: 'meron@example.com',
-      customerName: 'Meron T.',
-      address: 'Kazanchis, Addis Ababa',
-      itemsList: [{ name: 'Pizza', quantity: 1 }, { name: 'Salad', quantity: 1 }]
-    },
-  ]);
+  // Fetch orders from API
+  useEffect(() => {
+    fetchOrders();
+  }, []);
 
-  const [statusFilter,setStatusFilter] = useState("all");
-  const [merchantFilter,setMerchantFilter] = useState("all");
-  const [search,setSearch] = useState("");
-  const [selectedOrder,setSelectedOrder] = useState(null);
-  const [editOrder,setEditOrder] = useState(null);
+  const fetchOrders = async () => {
+    setLoading(true);
+    try {
+      const response = await apiClient.get('/orders');
+      setOrders(response.data || []);
+    } catch (error) {
+      console.error('Error fetching orders:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getStatusColor = (status) => {
     const colors = {
-      delivered:'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100',
-      pending:'bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-100',
-      'in-progress':'bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100',
-      cancelled:'bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100'
+      'DELIVERED': 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100',
+      'PENDING': 'bg-yellow-100 text-yellow-800 dark:bg-yellow-800 dark:text-yellow-100',
+      'CONFIRMED': 'bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100',
+      'PREPARING': 'bg-purple-100 text-purple-800 dark:bg-purple-800 dark:text-purple-100',
+      'READY': 'bg-indigo-100 text-indigo-800 dark:bg-indigo-800 dark:text-indigo-100',
+      'ASSIGNED': 'bg-orange-100 text-orange-800 dark:bg-orange-800 dark:text-orange-100',
+      'PICKED_UP': 'bg-teal-100 text-teal-800 dark:bg-teal-800 dark:text-teal-100',
+      'IN_TRANSIT': 'bg-cyan-100 text-cyan-800 dark:bg-cyan-800 dark:text-cyan-100',
+      'CANCELLED': 'bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100',
     };
     return colors[status] || 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-100';
   };
 
-  const filteredOrders = orders.filter((order)=>{
-    const statusMatch = statusFilter==="all" || order.status===statusFilter;
-    const merchantMatch = merchantFilter==="all" || order.merchant===merchantFilter;
+  const filteredOrders = orders.filter((order) => {
+    const statusMatch = statusFilter === "all" || order.status === statusFilter;
     const searchMatch =
-      order.id.toLowerCase().includes(search.toLowerCase()) ||
-      order.customer.toLowerCase().includes(search.toLowerCase()) ||
-      order.merchant.toLowerCase().includes(search.toLowerCase());
-
-    return statusMatch && merchantMatch && searchMatch;
+      !search ||
+      order.orderNumber?.toLowerCase().includes(search.toLowerCase()) ||
+      order.customer?.firstName?.toLowerCase().includes(search.toLowerCase()) ||
+      order.merchant?.businessName?.toLowerCase().includes(search.toLowerCase());
+    return statusMatch && searchMatch;
   });
 
-  const saveEditOrder = (updatedOrder) => {
-    setOrders(orders.map(o => o.id === updatedOrder.id ? updatedOrder : o));
-    setEditOrder(null);
+  const handleUpdateStatus = async (orderId, newStatus) => {
+    try {
+      await apiClient.patch(`/orders/${orderId}/status`, { status: newStatus });
+      fetchOrders();
+      setEditOrder(null);
+      setSelectedOrder(null);
+      alert(`✅ Order status updated to ${newStatus}`);
+    } catch (error) {
+      alert('❌ Error updating order status');
+    }
   };
 
-  const deleteOrder = (id) => {
-    if(window.confirm("Are you sure you want to delete this order?")) {
-      setOrders(orders.filter(o => o.id !== id));
+  const parseItems = (items) => {
+    if (!items) return [];
+    if (Array.isArray(items)) return items;
+    if (typeof items === 'string') {
+      try { return JSON.parse(items); } catch { return []; }
     }
+    return [];
+  };
+
+  if (loading) {
+    return (
+      <div className="p-6">
+        <div className="animate-pulse">
+          <div className="h-8 bg-gray-200 w-64 mb-6 rounded"></div>
+          <div className="grid grid-cols-5 gap-4 mb-6">
+            {[1,2,3,4,5].map(i => (
+              <div key={i} className="h-16 bg-gray-200 rounded"></div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const orderStats = {
+    total: orders.length,
+    pending: orders.filter(o => o.status === 'PENDING').length,
+    confirmed: orders.filter(o => o.status === 'CONFIRMED').length,
+    preparing: orders.filter(o => o.status === 'PREPARING').length,
+    ready: orders.filter(o => o.status === 'READY').length,
+    delivered: orders.filter(o => o.status === 'DELIVERED').length,
+    cancelled: orders.filter(o => o.status === 'CANCELLED').length,
   };
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 dark:bg-gray-900">
-
-      <h1 className="text-2xl sm:text-3xl font-bold mb-6 text-gray-900 dark:text-white">
-        Orders Management
-      </h1>
+      {/* Header */}
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">
+          Orders Management
+        </h1>
+        <button
+          onClick={fetchOrders}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+        >
+          <RefreshCw size={16} /> Refresh
+        </button>
+      </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6 lg:mb-8">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-4 mb-6 lg:mb-8">
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4 border dark:border-gray-700">
-          <p className="text-sm text-gray-500 dark:text-gray-400">Total Orders</p>
-          <p className="text-2xl font-bold text-gray-900 dark:text-white">{orders.length}</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Total</p>
+          <p className="text-2xl font-bold text-gray-900 dark:text-white">{orderStats.total}</p>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4 border dark:border-gray-700">
-          <p className="text-sm text-gray-500 dark:text-gray-400">Pending</p>
-          <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
-            {orders.filter(o=>o.status==="pending").length}
-          </p>
+          <p className="text-sm text-gray-500">Pending</p>
+          <p className="text-2xl font-bold text-yellow-600">{orderStats.pending}</p>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4 border dark:border-gray-700">
-          <p className="text-sm text-gray-500 dark:text-gray-400">In Progress</p>
-          <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-            {orders.filter(o=>o.status==="in-progress").length}
-          </p>
+          <p className="text-sm text-gray-500">Confirmed</p>
+          <p className="text-2xl font-bold text-blue-600">{orderStats.confirmed}</p>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4 border dark:border-gray-700">
-          <p className="text-sm text-gray-500 dark:text-gray-400">Delivered</p>
-          <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-            {orders.filter(o=>o.status==="delivered").length}
-          </p>
+          <p className="text-sm text-gray-500">Preparing</p>
+          <p className="text-2xl font-bold text-purple-600">{orderStats.preparing}</p>
         </div>
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4 border dark:border-gray-700">
-          <p className="text-sm text-gray-500 dark:text-gray-400">Cancelled</p>
-          <p className="text-2xl font-bold text-red-600 dark:text-red-400">
-            {orders.filter(o=>o.status==="cancelled").length}
-          </p>
+          <p className="text-sm text-gray-500">Ready</p>
+          <p className="text-2xl font-bold text-indigo-600">{orderStats.ready}</p>
+        </div>
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4 border dark:border-gray-700">
+          <p className="text-sm text-gray-500">Delivered</p>
+          <p className="text-2xl font-bold text-green-600">{orderStats.delivered}</p>
+        </div>
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4 border dark:border-gray-700">
+          <p className="text-sm text-gray-500">Cancelled</p>
+          <p className="text-2xl font-bold text-red-600">{orderStats.cancelled}</p>
         </div>
       </div>
 
       {/* Filters */}
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-4 mb-6 border dark:border-gray-700">
         <div className="flex flex-wrap gap-4 items-center">
-          <div className="flex items-center gap-2 text-gray-900 dark:text-white">
-            <Filter size={18}/>
-            <span>Filter by:</span>
-          </div>
-
+          <Filter size={18} />
           <select
-            onChange={(e)=>setStatusFilter(e.target.value)}
+            onChange={(e) => setStatusFilter(e.target.value)}
             className="border px-3 py-2 rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
           >
             <option value="all">All Status</option>
-            <option value="pending">Pending</option>
-            <option value="in-progress">In Progress</option>
-            <option value="delivered">Delivered</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
-
-          <select
-            onChange={(e)=>setMerchantFilter(e.target.value)}
-            className="border px-3 py-2 rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-          >
-            <option value="all">All Merchants</option>
-            {[...new Set(orders.map(o=>o.merchant))].map(m=>(
-              <option key={m} value={m}>{m}</option>
-            ))}
+            <option value="PENDING">Pending</option>
+            <option value="CONFIRMED">Confirmed</option>
+            <option value="PREPARING">Preparing</option>
+            <option value="READY">Ready</option>
+            <option value="ASSIGNED">Assigned</option>
+            <option value="PICKED_UP">Picked Up</option>
+            <option value="IN_TRANSIT">In Transit</option>
+            <option value="DELIVERED">Delivered</option>
+            <option value="CANCELLED">Cancelled</option>
           </select>
 
           <div className="relative flex-1 min-w-[220px]">
-            <Search className="absolute left-3 top-3 w-4 h-4 text-gray-400 dark:text-gray-300"/>
+            <Search className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
             <input
               type="text"
-              placeholder="Search orders..."
-              onChange={(e)=>setSearch(e.target.value)}
+              placeholder="Search by order #, customer, or merchant..."
+              onChange={(e) => setSearch(e.target.value)}
               className="pl-10 pr-4 py-2 border rounded-lg w-full dark:bg-gray-700 dark:border-gray-600 dark:text-white"
             />
           </div>
@@ -188,140 +184,146 @@ const Orders = () => {
         <table className="w-full">
           <thead className="bg-gray-50 dark:bg-gray-700">
             <tr>
-              <th className="py-4 px-6 text-left text-gray-900 dark:text-gray-100">Order ID</th>
-              <th className="py-4 px-6 text-left text-gray-900 dark:text-gray-100">Customer</th>
-              <th className="py-4 px-6 text-left text-gray-900 dark:text-gray-100">Merchant</th>
-              <th className="py-4 px-6 text-left text-gray-900 dark:text-gray-100">Items</th>
-              <th className="py-4 px-6 text-left text-gray-900 dark:text-gray-100">Amount</th>
-              <th className="py-4 px-6 text-left text-gray-900 dark:text-gray-100">Status</th>
-              <th className="py-4 px-6 text-left text-gray-900 dark:text-gray-100">Assign Rider</th>
+              <th className="py-4 px-6 text-left">Order #</th>
+              <th className="py-4 px-6 text-left">Customer</th>
+              <th className="py-4 px-6 text-left">Merchant</th>
+              <th className="py-4 px-6 text-left">Items</th>
+              <th className="py-4 px-6 text-left">Amount</th>
+              <th className="py-4 px-6 text-left">Status</th>
+              <th className="py-4 px-6 text-left">Actions</th>
             </tr>
           </thead>
-
           <tbody>
-            {filteredOrders.map(order=>(
-              <tr
-                key={order.id}
-                onClick={()=>setSelectedOrder(order)}
-                className="border-t cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
-              >
-                <td className="py-4 px-6">{order.id}</td>
-                <td className="py-4 px-6">{order.customer}</td>
-                <td className="py-4 px-6">{order.merchant}</td>
-                <td className="py-4 px-6">{order.items}</td>
-                <td className="py-4 px-6 text-teal-600 font-semibold">ETB {order.amount}</td>
-                <td className="py-4 px-6">
-                  <span className={`px-3 py-1 rounded-full text-xs ${getStatusColor(order.status)}`}>
-                    {order.status}
-                  </span>
-                </td>
-                <td className="py-4 px-6">
-                  <button
-                    onClick={(e)=>{
-                      e.stopPropagation();
-                      navigate(`/assign-rider/${order.id}`);
-                    }}
-                    className="px-3 py-1 bg-teal-600 text-white rounded-lg text-sm"
-                  >
-                    Assign
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {filteredOrders.map((order) => {
+              const itemsList = parseItems(order.items);
+              return (
+                <tr
+                  key={order.id}
+                  onClick={() => setSelectedOrder(order)}
+                  className="border-t cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700"
+                >
+                  <td className="py-4 px-6 font-medium">{order.orderNumber}</td>
+                  <td className="py-4 px-6">
+                    {order.customer?.firstName} {order.customer?.lastName}
+                  </td>
+                  <td className="py-4 px-6">{order.merchant?.businessName || 'N/A'}</td>
+                  <td className="py-4 px-6">{itemsList.length}</td>
+                  <td className="py-4 px-6 text-teal-600 font-semibold">ETB {order.total}</td>
+                  <td className="py-4 px-6">
+                    <span className={`px-3 py-1 rounded-full text-xs ${getStatusColor(order.status)}`}>
+                      {order.status}
+                    </span>
+                  </td>
+                  <td className="py-4 px-6">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditOrder(order);
+                        setSelectedOrder(null);
+                      }}
+                      className="px-3 py-1 bg-blue-600 text-white rounded-lg text-sm"
+                    >
+                      Update Status
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
+
+        {filteredOrders.length === 0 && (
+          <div className="text-center py-12 text-gray-500">
+            No orders found
+          </div>
+        )}
       </div>
 
       {/* Order Details Modal */}
       {selectedOrder && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center">
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-6 w-[450px]">
-            <h2 className="text-xl font-bold mb-4 text-gray-900 dark:text-white">Order {selectedOrder.id}</h2>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-6 w-[500px] max-h-[80vh] overflow-y-auto">
+            <h2 className="text-xl font-bold mb-4">
+              Order {selectedOrder.orderNumber}
+            </h2>
+            <p><b>Customer:</b> {selectedOrder.customer?.firstName} {selectedOrder.customer?.lastName}</p>
+            <p><b>Email:</b> {selectedOrder.customer?.email || 'N/A'}</p>
+            <p><b>Phone:</b> {selectedOrder.customer?.phone || 'N/A'}</p>
+            <p><b>Merchant:</b> {selectedOrder.merchant?.businessName || 'N/A'}</p>
+            <p><b>Payment:</b> {selectedOrder.paymentMethod} • {selectedOrder.paymentStatus}</p>
+            <p><b>Status:</b> {selectedOrder.status}</p>
 
-            <p><b>Customer:</b> {selectedOrder.customerName}</p>
-            <p><b>Email:</b> {selectedOrder.customerEmail}</p>
-            <p><b>Address:</b> {selectedOrder.address}</p>
-            <p><b>Merchant:</b> {selectedOrder.merchant}</p>
-
-            <h3 className="font-semibold mt-4">Items</h3>
+            <h3 className="font-semibold mt-4 mb-2">Items</h3>
             <ul className="list-disc ml-6">
-              {selectedOrder.itemsList.map((item,i)=>(
-                <li key={i}>{item.name} × {item.quantity}</li>
+              {parseItems(selectedOrder.items).map((item, i) => (
+                <li key={i}>{item.quantity}x {item.name} - ETB {item.price * item.quantity}</li>
               ))}
             </ul>
+            <p className="mt-3 font-bold">Total: ETB {selectedOrder.total}</p>
 
             <div className="flex justify-end gap-2 mt-6">
-
               <button
-                onClick={()=>{
+                onClick={() => {
                   setEditOrder(selectedOrder);
                   setSelectedOrder(null);
                 }}
                 className="px-4 py-2 rounded-lg bg-blue-600 text-white"
               >
-                Edit
+                Update Status
               </button>
-
               <button
-                onClick={()=>{
-                  deleteOrder(selectedOrder.id);
-                  setSelectedOrder(null);
-                }}
-                className="px-4 py-2 rounded-lg bg-red-600 text-white"
-              >
-                Delete
-              </button>
-
-              <button
-                onClick={()=>setSelectedOrder(null)}
+                onClick={() => setSelectedOrder(null)}
                 className="px-4 py-2 rounded-lg bg-gray-300 dark:bg-gray-700 dark:text-white"
               >
                 Close
               </button>
-
             </div>
           </div>
         </div>
       )}
 
-      {/* Edit Modal */}
+      {/* Edit Status Modal */}
       {editOrder && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center">
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-6 w-[450px]">
-            <h2 className="text-xl font-bold mb-4">Edit Order {editOrder.id}</h2>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-6 w-[400px]">
+            <h2 className="text-xl font-bold mb-4">
+              Update Status - {editOrder.orderNumber}
+            </h2>
 
-            <label>Status:</label>
-            <select 
-              value={editOrder.status} 
-              onChange={(e)=>setEditOrder({...editOrder, status:e.target.value})}
-              className="w-full border px-3 py-2 mb-4 rounded-lg"
+            <label className="block mb-2 font-medium">Status:</label>
+            <select
+              value={editOrder.status}
+              onChange={(e) => setEditOrder({ ...editOrder, status: e.target.value })}
+              className="w-full border px-3 py-2 mb-4 rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white"
             >
-              <option value="pending">Pending</option>
-              <option value="in-progress">In Progress</option>
-              <option value="delivered">Delivered</option>
-              <option value="cancelled">Cancelled</option>
+              <option value="PENDING">Pending</option>
+              <option value="CONFIRMED">Confirmed</option>
+              <option value="PREPARING">Preparing</option>
+              <option value="READY">Ready</option>
+              <option value="ASSIGNED">Assigned</option>
+              <option value="PICKED_UP">Picked Up</option>
+              <option value="IN_TRANSIT">In Transit</option>
+              <option value="DELIVERED">Delivered</option>
+              <option value="CANCELLED">Cancelled</option>
             </select>
 
-            <label>Amount:</label>
-            <input 
-              type="number"
-              value={editOrder.amount}
-              onChange={(e)=>setEditOrder({...editOrder, amount:Number(e.target.value)})}
-              className="w-full border px-3 py-2 mb-4 rounded-lg"
-            />
-
-            <div className="flex justify-end gap-2">
-              <button onClick={()=>setEditOrder(null)} className="px-4 py-2 bg-gray-300 rounded-lg">
+            <div className="flex justify-end gap-2 mt-4">
+              <button
+                onClick={() => setEditOrder(null)}
+                className="px-4 py-2 bg-gray-300 rounded-lg dark:bg-gray-700"
+              >
                 Cancel
               </button>
-              <button onClick={()=>saveEditOrder(editOrder)} className="px-4 py-2 bg-teal-600 text-white rounded-lg">
-                Save
+              <button
+                onClick={() => handleUpdateStatus(editOrder.id, editOrder.status)}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg"
+              >
+                Save Status
               </button>
             </div>
           </div>
         </div>
       )}
-
     </div>
   );
 };

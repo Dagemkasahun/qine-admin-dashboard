@@ -98,56 +98,80 @@ const PendingApprovals = () => {
     fetchPendingMerchants();
   };
 
-  const handleApprove = async (merchantId) => {
-    if (!window.confirm('Are you sure you want to approve this merchant?')) {
-      return;
-    }
+  // src/pages/Admin/PendingApprovals.jsx
 
-    try {
-      // Update merchant status to ACTIVE
-      await apiClient.patch(`/merchants/${merchantId}`, {
-        status: 'ACTIVE',
-        approvedAt: new Date().toISOString(),
-      });
-      
-      // Remove from pending list
-      setPendingMerchants(prev => prev.filter(m => m.id !== merchantId));
-      
-      // Show success message
-      alert('✅ Merchant approved successfully! The merchant can now log in and start selling.');
-      
-    } catch (error) {
-      console.error('Error approving merchant:', error);
-      alert('❌ Error approving merchant: ' + (error.response?.data?.error || error.message));
-    }
-  };
+    const handleApprove = async (merchantId) => {
+      if (!window.confirm('Are you sure you want to approve this merchant?')) {
+        return;
+      }
 
-  const handleReject = async () => {
-    if (!rejectionReason.trim()) {
-      alert('Please provide a reason for rejection');
-      return;
-    }
+      try {
+        // Try the dedicated approve endpoint first
+        await apiClient.post(`/merchants/${merchantId}/approve`);
+        
+        // Remove from pending list
+        setPendingMerchants(prev => prev.filter(m => m.id !== merchantId));
+        alert('✅ Merchant approved successfully!');
+        
+      } catch (error) {
+        console.error('Error approving merchant:', error);
+        
+        // Fallback to PATCH if approve endpoint doesn't exist
+        try {
+          await apiClient.patch(`/merchants/${merchantId}`, {
+            status: 'ACTIVE',
+            approvedAt: new Date().toISOString(),
+          });
+          
+          setPendingMerchants(prev => prev.filter(m => m.id !== merchantId));
+          alert('✅ Merchant approved successfully!');
+          
+        } catch (patchError) {
+          alert('❌ Error approving merchant: ' + (error.response?.data?.error || error.message));
+        }
+      }
+    };
 
-    try {
-      // Update merchant status to REJECTED with reason
-      await apiClient.patch(`/merchants/${selectedMerchant.id}`, {
-        status: 'REJECTED',
-        rejectionReason: rejectionReason,
-      });
-      
-      // Remove from pending list
-      setPendingMerchants(prev => prev.filter(m => m.id !== selectedMerchant.id));
-      setShowRejectModal(false);
-      setSelectedMerchant(null);
-      setRejectionReason('');
-      
-      alert('Merchant application rejected.');
-      
-    } catch (error) {
-      console.error('Error rejecting merchant:', error);
-      alert('❌ Error rejecting merchant: ' + (error.response?.data?.error || error.message));
-    }
-  };
+    const handleReject = async () => {
+      if (!rejectionReason.trim()) {
+        alert('Please provide a reason for rejection');
+        return;
+      }
+
+      try {
+        // Try the dedicated reject endpoint first
+        await apiClient.post(`/merchants/${selectedMerchant.id}/reject`, {
+          reason: rejectionReason
+        });
+        
+        setPendingMerchants(prev => prev.filter(m => m.id !== selectedMerchant.id));
+        setShowRejectModal(false);
+        setSelectedMerchant(null);
+        setRejectionReason('');
+        alert('Merchant application rejected.');
+        
+      } catch (error) {
+        console.error('Error rejecting merchant:', error);
+        
+        // Fallback to PATCH
+        try {
+          await apiClient.patch(`/merchants/${selectedMerchant.id}`, {
+            status: 'REJECTED',
+            rejectionReason: rejectionReason,
+          });
+          
+          setPendingMerchants(prev => prev.filter(m => m.id !== selectedMerchant.id));
+          setShowRejectModal(false);
+          setSelectedMerchant(null);
+          setRejectionReason('');
+          alert('Merchant application rejected.');
+          
+        } catch (patchError) {
+          alert('❌ Error rejecting merchant');
+        }
+      }
+    };
+
 
   const filteredMerchants = pendingMerchants.filter(merchant => {
     if (filter !== 'all' && merchant.businessType !== filter) return false;
