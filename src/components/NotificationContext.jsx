@@ -19,20 +19,17 @@ export const NotificationProvider = ({ children }) => {
   const [socket, setSocket] = useState(null);
 
   useEffect(() => {
-    // Get the WebSocket URL from environment variable or use production URL
     const getSocketUrl = () => {
-      // In production, use the Render backend URL
       if (import.meta.env.PROD) {
         return 'https://qine-backend.onrender.com';
       }
-      // In development, use localhost
-      return 'http://localhost:5001';
+      // Development - use same port as API server (5002)
+      return 'http://localhost:5002';
     };
 
     const SOCKET_URL = getSocketUrl();
     console.log('🔌 Connecting to WebSocket at:', SOCKET_URL);
 
-    // Connect to WebSocket server
     const newSocket = io(SOCKET_URL, {
       transports: ['websocket', 'polling'],
       reconnection: true,
@@ -41,11 +38,9 @@ export const NotificationProvider = ({ children }) => {
     });
     setSocket(newSocket);
 
-    // Listen for new notifications
     newSocket.on('notification', (notification) => {
       addNotification(notification);
       
-      // Show toast based on notification type
       switch (notification.type) {
         case 'order':
           toast.success(`🆕 New Order: ${notification.message}`);
@@ -64,7 +59,6 @@ export const NotificationProvider = ({ children }) => {
       }
     });
 
-    // Listen for order updates
     newSocket.on('orderUpdate', (data) => {
       addNotification({
         id: Date.now(),
@@ -77,20 +71,19 @@ export const NotificationProvider = ({ children }) => {
       });
     });
 
-    // Listen for connection events
     newSocket.on('connect', () => {
-      console.log('🔌 WebSocket connected successfully');
+      console.log('🔌 WebSocket connected to', SOCKET_URL);
+      newSocket.emit('joinAdminRoom');
     });
 
     newSocket.on('connect_error', (error) => {
-      console.error('🔌 WebSocket connection error:', error);
+      console.warn('🔌 WebSocket connection failed (non-critical):', error.message);
     });
 
     newSocket.on('disconnect', () => {
       console.log('🔌 WebSocket disconnected');
     });
 
-    // Cleanup on unmount
     return () => {
       if (newSocket) {
         newSocket.disconnect();

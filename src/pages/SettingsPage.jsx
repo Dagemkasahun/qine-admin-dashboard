@@ -1,4 +1,4 @@
-// src/pages/SettingsPage.jsx
+// src/pages/SettingsPage.jsx - COMPLETE WITH ALL 11 TABS
 import { useState, useContext, useEffect } from 'react';
 import { ThemeContext } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
@@ -6,7 +6,8 @@ import {
   Settings, Database, Globe, Bell, Shield, Palette,
   Save, Server, Mail, CreditCard, HardDrive, Activity,
   Download, Upload, RefreshCw, CheckCircle, AlertCircle,
-  Eye, EyeOff, Key, Wifi, Cpu, HardDrive as Disk, Clock
+  Eye, EyeOff, Key, Wifi, Cpu, HardDrive as Disk, Clock,
+  DollarSign, Building2, Banknote, Send, FileText, Edit
 } from 'lucide-react';
 import apiClient from '../api/client';
 
@@ -200,14 +201,12 @@ const SettingsPage = () => {
   const loadSettings = async () => {
     setLoading(true);
     try {
-      // Try to fetch from API first
       const response = await apiClient.get('/settings');
       if (response.data) {
         setSettings(prev => ({ ...prev, ...response.data }));
       }
     } catch (error) {
       console.log('Could not load settings from API, using localStorage');
-      // Fallback to localStorage
       const savedSettings = localStorage.getItem('appSettings');
       if (savedSettings) {
         try {
@@ -232,10 +231,7 @@ const SettingsPage = () => {
   const handleSave = async () => {
     setSaving(true);
     try {
-      // Save to backend
       const response = await apiClient.post('/settings', settings);
-      
-      // Also save to localStorage as backup
       localStorage.setItem('appSettings', JSON.stringify(settings));
       
       if (response.data?.success) {
@@ -245,11 +241,8 @@ const SettingsPage = () => {
       }
     } catch (error) {
       console.error('Error saving settings:', error);
-      
-      // If API fails, still save to localStorage
       localStorage.setItem('appSettings', JSON.stringify(settings));
       
-      // Show more helpful error message
       if (error.response?.status === 404) {
         alert('⚠️ Settings saved locally only. Backend endpoint not available.');
       } else if (error.response?.status === 401) {
@@ -444,7 +437,7 @@ const SettingsPage = () => {
           {/* Content Area */}
           <div className={`flex-1 ${cardClass} rounded-xl shadow-sm p-6`}>
             
-            {/* General Settings */}
+            {/* ============ GENERAL SETTINGS ============ */}
             {activeTab === 'general' && (
               <div className="space-y-6">
                 <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
@@ -561,7 +554,7 @@ const SettingsPage = () => {
               </div>
             )}
 
-            {/* Appearance Settings */}
+            {/* ============ APPEARANCE SETTINGS ============ */}
             {activeTab === 'appearance' && (
               <div className="space-y-6">
                 <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
@@ -698,7 +691,7 @@ const SettingsPage = () => {
               </div>
             )}
 
-            {/* Notifications Settings */}
+            {/* ============ NOTIFICATIONS SETTINGS ============ */}
             {activeTab === 'notifications' && (
               <div className="space-y-6">
                 <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
@@ -739,6 +732,22 @@ const SettingsPage = () => {
                   </div>
 
                   <div className="flex items-center justify-between py-2">
+                    <span className={labelClass}>SMS Notifications</span>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={settings.notifications.smsNotifications}
+                        onChange={(e) => setSettings({
+                          ...settings,
+                          notifications: { ...settings.notifications, smsNotifications: e.target.checked }
+                        })}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-blue-600 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+                    </label>
+                  </div>
+
+                  <div className="flex items-center justify-between py-2">
                     <span className={labelClass}>Order Alerts</span>
                     <label className="relative inline-flex items-center cursor-pointer">
                       <input
@@ -771,6 +780,22 @@ const SettingsPage = () => {
                   </div>
 
                   <div className="flex items-center justify-between py-2">
+                    <span className={labelClass}>Rider Alerts</span>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={settings.notifications.riderAlerts}
+                        onChange={(e) => setSettings({
+                          ...settings,
+                          notifications: { ...settings.notifications, riderAlerts: e.target.checked }
+                        })}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-blue-600 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+                    </label>
+                  </div>
+
+                  <div className="flex items-center justify-between py-2">
                     <span className={labelClass}>Daily Digest</span>
                     <label className="relative inline-flex items-center cursor-pointer">
                       <input
@@ -789,7 +814,7 @@ const SettingsPage = () => {
               </div>
             )}
 
-            {/* API & Integration Settings */}
+            {/* ============ API & INTEGRATION SETTINGS ============ */}
             {activeTab === 'api' && (
               <div className="space-y-6">
                 <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
@@ -905,7 +930,7 @@ const SettingsPage = () => {
               </div>
             )}
 
-            {/* Database Settings */}
+            {/* ============ DATABASE SETTINGS ============ */}
             {activeTab === 'database' && (
               <div className="space-y-6">
                 <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
@@ -965,7 +990,7 @@ const SettingsPage = () => {
               </div>
             )}
 
-            {/* Server & API Settings */}
+            {/* ============ SERVER & API SETTINGS ============ */}
             {activeTab === 'server' && (
               <div className="space-y-6">
                 <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
@@ -1125,7 +1150,7 @@ const SettingsPage = () => {
               </div>
             )}
 
-            {/* Security Settings */}
+            {/* ============ SECURITY SETTINGS ============ */}
             {activeTab === 'security' && (
               <div className="space-y-6">
                 <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
@@ -1212,14 +1237,861 @@ const SettingsPage = () => {
               </div>
             )}
 
-            {/* Placeholder for other tabs */}
-            {!['general', 'appearance', 'notifications', 'api', 'database', 'server', 'security'].includes(activeTab) && (
+            {/* ============ PAYMENT SETTINGS ============ */}
+            {activeTab === 'payment' && (
+              <div className="space-y-6">
+                <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                  <CreditCard className="w-5 h-5" /> Payment Settings
+                </h2>
+
+                {/* Commission Rates */}
+                <div className={`p-4 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                  <h3 className="font-medium mb-4 flex items-center gap-2">
+                    <DollarSign className="w-4 h-4 text-green-500" /> Commission Rates
+                  </h3>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className={labelClass}>Default Rate (%)</span>
+                      <input
+                        type="number"
+                        value={settings.payment.commissionRates.default}
+                        onChange={(e) => setSettings({
+                          ...settings,
+                          payment: {
+                            ...settings.payment,
+                            commissionRates: { ...settings.payment.commissionRates, default: parseFloat(e.target.value) }
+                          }
+                        })}
+                        className={`w-24 border rounded-lg px-3 py-1.5 ${inputClass}`}
+                        min="0" max="100"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className={labelClass}>Restaurant Rate (%)</span>
+                      <input
+                        type="number"
+                        value={settings.payment.commissionRates.restaurant}
+                        onChange={(e) => setSettings({
+                          ...settings,
+                          payment: {
+                            ...settings.payment,
+                            commissionRates: { ...settings.payment.commissionRates, restaurant: parseFloat(e.target.value) }
+                          }
+                        })}
+                        className={`w-24 border rounded-lg px-3 py-1.5 ${inputClass}`}
+                        min="0" max="100"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className={labelClass}>Product Rate (%)</span>
+                      <input
+                        type="number"
+                        value={settings.payment.commissionRates.product}
+                        onChange={(e) => setSettings({
+                          ...settings,
+                          payment: {
+                            ...settings.payment,
+                            commissionRates: { ...settings.payment.commissionRates, product: parseFloat(e.target.value) }
+                          }
+                        })}
+                        className={`w-24 border rounded-lg px-3 py-1.5 ${inputClass}`}
+                        min="0" max="100"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className={labelClass}>Service Rate (%)</span>
+                      <input
+                        type="number"
+                        value={settings.payment.commissionRates.service}
+                        onChange={(e) => setSettings({
+                          ...settings,
+                          payment: {
+                            ...settings.payment,
+                            commissionRates: { ...settings.payment.commissionRates, service: parseFloat(e.target.value) }
+                          }
+                        })}
+                        className={`w-24 border rounded-lg px-3 py-1.5 ${inputClass}`}
+                        min="0" max="100"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Payment Providers */}
+                <div className={`p-4 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                  <h3 className="font-medium mb-4 flex items-center gap-2">
+                    <Building2 className="w-4 h-4 text-blue-500" /> Payment Providers
+                  </h3>
+                  
+                  {/* CBE */}
+                  <div className="mb-4 p-3 border rounded-lg dark:border-gray-600">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-medium">Commercial Bank of Ethiopia (CBE)</span>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={settings.payment.providers.cbe.enabled}
+                          onChange={(e) => setSettings({
+                            ...settings,
+                            payment: {
+                              ...settings.payment,
+                              providers: {
+                                ...settings.payment.providers,
+                                cbe: { ...settings.payment.providers.cbe, enabled: e.target.checked }
+                              }
+                            }
+                          })}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-blue-600 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+                      </label>
+                    </div>
+                    {settings.payment.providers.cbe.enabled && (
+                      <div className="grid grid-cols-2 gap-3 mt-3">
+                        <input
+                          type="text" placeholder="API Key"
+                          value={settings.payment.providers.cbe.apiKey}
+                          onChange={(e) => setSettings({
+                            ...settings,
+                            payment: {
+                              ...settings.payment,
+                              providers: {
+                                ...settings.payment.providers,
+                                cbe: { ...settings.payment.providers.cbe, apiKey: e.target.value }
+                              }
+                            }
+                          })}
+                          className={`border rounded-lg px-3 py-1.5 text-sm ${inputClass}`}
+                        />
+                        <input
+                          type="text" placeholder="Merchant ID"
+                          value={settings.payment.providers.cbe.merchantId}
+                          onChange={(e) => setSettings({
+                            ...settings,
+                            payment: {
+                              ...settings.payment,
+                              providers: {
+                                ...settings.payment.providers,
+                                cbe: { ...settings.payment.providers.cbe, merchantId: e.target.value }
+                              }
+                            }
+                          })}
+                          className={`border rounded-lg px-3 py-1.5 text-sm ${inputClass}`}
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Telebirr */}
+                  <div className="mb-4 p-3 border rounded-lg dark:border-gray-600">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-medium">Telebirr</span>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={settings.payment.providers.telebirr.enabled}
+                          onChange={(e) => setSettings({
+                            ...settings,
+                            payment: {
+                              ...settings.payment,
+                              providers: {
+                                ...settings.payment.providers,
+                                telebirr: { ...settings.payment.providers.telebirr, enabled: e.target.checked }
+                              }
+                            }
+                          })}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-blue-600 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+                      </label>
+                    </div>
+                    {settings.payment.providers.telebirr.enabled && (
+                      <div className="grid grid-cols-2 gap-3 mt-3">
+                        <input
+                          type="text" placeholder="API Key"
+                          value={settings.payment.providers.telebirr.apiKey}
+                          onChange={(e) => setSettings({
+                            ...settings,
+                            payment: {
+                              ...settings.payment,
+                              providers: {
+                                ...settings.payment.providers,
+                                telebirr: { ...settings.payment.providers.telebirr, apiKey: e.target.value }
+                              }
+                            }
+                          })}
+                          className={`border rounded-lg px-3 py-1.5 text-sm ${inputClass}`}
+                        />
+                        <input
+                          type="text" placeholder="Merchant ID"
+                          value={settings.payment.providers.telebirr.merchantId}
+                          onChange={(e) => setSettings({
+                            ...settings,
+                            payment: {
+                              ...settings.payment,
+                              providers: {
+                                ...settings.payment.providers,
+                                telebirr: { ...settings.payment.providers.telebirr, merchantId: e.target.value }
+                              }
+                            }
+                          })}
+                          className={`border rounded-lg px-3 py-1.5 text-sm ${inputClass}`}
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Amole */}
+                  <div className="p-3 border rounded-lg dark:border-gray-600">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-medium">Amole</span>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={settings.payment.providers.amole.enabled}
+                          onChange={(e) => setSettings({
+                            ...settings,
+                            payment: {
+                              ...settings.payment,
+                              providers: {
+                                ...settings.payment.providers,
+                                amole: { ...settings.payment.providers.amole, enabled: e.target.checked }
+                              }
+                            }
+                          })}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-blue-600 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+                      </label>
+                    </div>
+                    {settings.payment.providers.amole.enabled && (
+                      <div className="grid grid-cols-2 gap-3 mt-3">
+                        <input
+                          type="text" placeholder="API Key"
+                          value={settings.payment.providers.amole.apiKey}
+                          onChange={(e) => setSettings({
+                            ...settings,
+                            payment: {
+                              ...settings.payment,
+                              providers: {
+                                ...settings.payment.providers,
+                                amole: { ...settings.payment.providers.amole, apiKey: e.target.value }
+                              }
+                            }
+                          })}
+                          className={`border rounded-lg px-3 py-1.5 text-sm ${inputClass}`}
+                        />
+                        <input
+                          type="text" placeholder="Merchant ID"
+                          value={settings.payment.providers.amole.merchantId}
+                          onChange={(e) => setSettings({
+                            ...settings,
+                            payment: {
+                              ...settings.payment,
+                              providers: {
+                                ...settings.payment.providers,
+                                amole: { ...settings.payment.providers.amole, merchantId: e.target.value }
+                              }
+                            }
+                          })}
+                          className={`border rounded-lg px-3 py-1.5 text-sm ${inputClass}`}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Payout Settings */}
+                <div className={`p-4 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                  <h3 className="font-medium mb-4 flex items-center gap-2">
+                    <Banknote className="w-4 h-4 text-purple-500" /> Payout Settings
+                  </h3>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className={labelClass}>Payout Schedule</span>
+                      <select
+                        value={settings.payment.payoutSchedule}
+                        onChange={(e) => setSettings({
+                          ...settings,
+                          payment: { ...settings.payment, payoutSchedule: e.target.value }
+                        })}
+                        className={`w-40 border rounded-lg px-3 py-1.5 ${inputClass}`}
+                      >
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="biweekly">Bi-weekly</option>
+                        <option value="monthly">Monthly</option>
+                      </select>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className={labelClass}>Minimum Payout (ETB)</span>
+                      <input
+                        type="number"
+                        value={settings.payment.minimumPayout}
+                        onChange={(e) => setSettings({
+                          ...settings,
+                          payment: { ...settings.payment, minimumPayout: parseInt(e.target.value) }
+                        })}
+                        className={`w-32 border rounded-lg px-3 py-1.5 ${inputClass}`}
+                        min="0"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between py-2">
+                      <span className={labelClass}>Auto-Approve Payouts</span>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={settings.payment.autoApprovePayouts}
+                          onChange={(e) => setSettings({
+                            ...settings,
+                            payment: { ...settings.payment, autoApprovePayouts: e.target.checked }
+                          })}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-blue-600 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ============ EMAIL SETTINGS ============ */}
+            {activeTab === 'email' && (
+              <div className="space-y-6">
+                <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                  <Mail className="w-5 h-5" /> Email Settings
+                </h2>
+
+                {/* SMTP Configuration */}
+                <div className={`p-4 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                  <h3 className="font-medium mb-4 flex items-center gap-2">
+                    <Server className="w-4 h-4 text-blue-500" /> SMTP Server
+                  </h3>
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className={`block text-sm mb-1 ${labelClass}`}>SMTP Host</label>
+                        <input
+                          type="text"
+                          value={settings.email.smtp.host}
+                          onChange={(e) => setSettings({
+                            ...settings,
+                            email: { ...settings.email, smtp: { ...settings.email.smtp, host: e.target.value } }
+                          })}
+                          className={`w-full border rounded-lg px-3 py-2 ${inputClass}`}
+                          placeholder="smtp.gmail.com"
+                        />
+                      </div>
+                      <div>
+                        <label className={`block text-sm mb-1 ${labelClass}`}>Port</label>
+                        <input
+                          type="number"
+                          value={settings.email.smtp.port}
+                          onChange={(e) => setSettings({
+                            ...settings,
+                            email: { ...settings.email, smtp: { ...settings.email.smtp, port: parseInt(e.target.value) } }
+                          })}
+                          className={`w-full border rounded-lg px-3 py-2 ${inputClass}`}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className={`block text-sm mb-1 ${labelClass}`}>Username</label>
+                        <input
+                          type="text"
+                          value={settings.email.smtp.username}
+                          onChange={(e) => setSettings({
+                            ...settings,
+                            email: { ...settings.email, smtp: { ...settings.email.smtp, username: e.target.value } }
+                          })}
+                          className={`w-full border rounded-lg px-3 py-2 ${inputClass}`}
+                        />
+                      </div>
+                      <div>
+                        <label className={`block text-sm mb-1 ${labelClass}`}>Password</label>
+                        <div className="relative">
+                          <input
+                            type={showPassword.smtp ? 'text' : 'password'}
+                            value={settings.email.smtp.password}
+                            onChange={(e) => setSettings({
+                              ...settings,
+                              email: { ...settings.email, smtp: { ...settings.email.smtp, password: e.target.value } }
+                            })}
+                            className={`w-full border rounded-lg px-3 py-2 pr-10 ${inputClass}`}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword(prev => ({ ...prev, smtp: !prev.smtp }))}
+                            className="absolute right-3 top-1/2 -translate-y-1/2"
+                          >
+                            {showPassword.smtp ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className={labelClass}>Secure (SSL/TLS)</span>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={settings.email.smtp.secure}
+                          onChange={(e) => setSettings({
+                            ...settings,
+                            email: { ...settings.email, smtp: { ...settings.email.smtp, secure: e.target.checked } }
+                          })}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-blue-600 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+                      </label>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        try {
+                          await apiClient.post('/email/test', settings.email.smtp);
+                          alert('✅ Test email sent successfully!');
+                        } catch (error) {
+                          alert('❌ Failed to send test email');
+                        }
+                      }}
+                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2"
+                    >
+                      <Send className="w-4 h-4" /> Send Test Email
+                    </button>
+                  </div>
+                </div>
+
+                {/* Email Templates */}
+                <div className={`p-4 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                  <h3 className="font-medium mb-4 flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-purple-500" /> Email Templates
+                  </h3>
+                  <div className="space-y-3">
+                    {Object.entries(settings.email.templates).map(([key, value]) => (
+                      <div key={key} className="flex items-center justify-between py-2 border-b dark:border-gray-600 last:border-0">
+                        <span className={`capitalize ${labelClass}`}>
+                          {key.replace(/([A-Z])/g, ' $1').trim()}
+                        </span>
+                        <div className="flex items-center gap-3">
+                          <label className="relative inline-flex items-center cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={value}
+                              onChange={(e) => setSettings({
+                                ...settings,
+                                email: {
+                                  ...settings.email,
+                                  templates: { ...settings.email.templates, [key]: e.target.checked }
+                                }
+                              })}
+                              className="sr-only peer"
+                            />
+                            <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-blue-600 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+                          </label>
+                          <button className="text-blue-600 hover:text-blue-800 text-sm">
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button className="text-blue-600 hover:text-blue-800 text-sm">
+                            <Eye className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Sender Information */}
+                <div className={`p-4 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                  <h3 className="font-medium mb-4">Sender Information</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className={`block text-sm mb-1 ${labelClass}`}>From Name</label>
+                      <input
+                        type="text"
+                        value={settings.email.fromName}
+                        onChange={(e) => setSettings({
+                          ...settings,
+                          email: { ...settings.email, fromName: e.target.value }
+                        })}
+                        className={`w-full border rounded-lg px-3 py-2 ${inputClass}`}
+                      />
+                    </div>
+                    <div>
+                      <label className={`block text-sm mb-1 ${labelClass}`}>From Email</label>
+                      <input
+                        type="email"
+                        value={settings.email.fromEmail}
+                        onChange={(e) => setSettings({
+                          ...settings,
+                          email: { ...settings.email, fromEmail: e.target.value }
+                        })}
+                        className={`w-full border rounded-lg px-3 py-2 ${inputClass}`}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ============ BACKUP & RESTORE SETTINGS ============ */}
+            {activeTab === 'backup' && (
+              <div className="space-y-6">
+                <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                  <HardDrive className="w-5 h-5" /> Backup & Restore
+                </h2>
+
+                {/* Automated Backup */}
+                <div className={`p-4 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                  <h3 className="font-medium mb-4 flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-blue-500" /> Automated Backup
+                  </h3>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between py-2">
+                      <span className={labelClass}>Enable Auto Backup</span>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={settings.backup.autoBackup}
+                          onChange={(e) => setSettings({
+                            ...settings,
+                            backup: { ...settings.backup, autoBackup: e.target.checked }
+                          })}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-blue-600 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+                      </label>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className={labelClass}>Backup Frequency</span>
+                      <select
+                        value={settings.backup.backupFrequency}
+                        onChange={(e) => setSettings({
+                          ...settings,
+                          backup: { ...settings.backup, backupFrequency: e.target.value }
+                        })}
+                        className={`w-40 border rounded-lg px-3 py-1.5 ${inputClass}`}
+                      >
+                        <option value="hourly">Hourly</option>
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Weekly</option>
+                      </select>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className={labelClass}>Backup Time</span>
+                      <input
+                        type="time"
+                        value={settings.backup.backupTime}
+                        onChange={(e) => setSettings({
+                          ...settings,
+                          backup: { ...settings.backup, backupTime: e.target.value }
+                        })}
+                        className={`border rounded-lg px-3 py-1.5 ${inputClass}`}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className={labelClass}>Retention (days)</span>
+                      <input
+                        type="number"
+                        value={settings.backup.retentionDays}
+                        onChange={(e) => setSettings({
+                          ...settings,
+                          backup: { ...settings.backup, retentionDays: parseInt(e.target.value) }
+                        })}
+                        className={`w-24 border rounded-lg px-3 py-1.5 ${inputClass}`}
+                        min="1" max="365"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between py-2">
+                      <span className={labelClass}>Include Uploaded Files</span>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={settings.backup.includeFiles}
+                          onChange={(e) => setSettings({
+                            ...settings,
+                            backup: { ...settings.backup, includeFiles: e.target.checked }
+                          })}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-blue-600 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Manual Backup Actions */}
+                <div className={`p-4 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                  <h3 className="font-medium mb-4">Manual Actions</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <button
+                      onClick={async () => {
+                        try {
+                          await apiClient.post('/backup/create');
+                          alert('✅ Backup created successfully!');
+                        } catch (error) {
+                          alert('❌ Backup failed');
+                        }
+                      }}
+                      className="px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2"
+                    >
+                      <Download className="w-4 h-4" /> Create Backup Now
+                    </button>
+                    <button
+                      onClick={() => document.getElementById('restoreFile')?.click()}
+                      className="px-4 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 flex items-center justify-center gap-2"
+                    >
+                      <Upload className="w-4 h-4" /> Restore from File
+                    </button>
+                    <input
+                      id="restoreFile"
+                      type="file"
+                      accept=".sql,.zip,.gz"
+                      onChange={async (e) => {
+                        const file = e.target.files[0];
+                        if (!file) return;
+                        if (!window.confirm('Restoring will overwrite current data. Continue?')) return;
+                        try {
+                          const formData = new FormData();
+                          formData.append('backup', file);
+                          await apiClient.post('/backup/restore', formData);
+                          alert('✅ Restore completed!');
+                        } catch (error) {
+                          alert('❌ Restore failed');
+                        }
+                      }}
+                      className="hidden"
+                    />
+                  </div>
+                </div>
+
+                {/* Backup History */}
+                <div className={`p-4 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                  <h3 className="font-medium mb-4">Backup History</h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className={`border-b ${darkMode ? 'border-gray-600' : 'border-gray-200'}`}>
+                          <th className="text-left py-2">Date</th>
+                          <th className="text-left py-2">Size</th>
+                          <th className="text-left py-2">Type</th>
+                          <th className="text-left py-2">Status</th>
+                          <th className="text-right py-2">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className={`border-b ${darkMode ? 'border-gray-600' : 'border-gray-200'}`}>
+                          <td className="py-2">{new Date().toISOString().split('T')[0]} 02:00</td>
+                          <td className="py-2">245 MB</td>
+                          <td className="py-2"><span className="px-2 py-0.5 bg-blue-100 text-blue-800 rounded text-xs">Auto</span></td>
+                          <td className="py-2"><span className="px-2 py-0.5 bg-green-100 text-green-800 rounded text-xs">Success</span></td>
+                          <td className="py-2 text-right">
+                            <button className="text-blue-600 hover:underline text-xs mr-2">Download</button>
+                            <button className="text-red-600 hover:underline text-xs">Delete</button>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ============ SYSTEM HEALTH SETTINGS ============ */}
+            {activeTab === 'system' && (
+              <div className="space-y-6">
+                <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                  <Activity className="w-5 h-5" /> System Health
+                </h2>
+
+                {/* System Status Overview */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className={`p-4 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-50'} text-center`}>
+                    <div className="flex justify-center mb-2">
+                      <div className="w-16 h-16 rounded-full border-4 border-green-500 flex items-center justify-center">
+                        <span className="text-2xl font-bold text-green-500">98%</span>
+                      </div>
+                    </div>
+                    <p className="font-medium">Uptime</p>
+                    <p className={`text-xs ${mutedClass}`}>Last 30 days</p>
+                  </div>
+                  <div className={`p-4 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-50'} text-center`}>
+                    <div className="flex justify-center mb-2">
+                      <div className="w-16 h-16 rounded-full border-4 border-blue-500 flex items-center justify-center">
+                        <span className="text-2xl font-bold text-blue-500">1.2s</span>
+                      </div>
+                    </div>
+                    <p className="font-medium">Avg Response</p>
+                    <p className={`text-xs ${mutedClass}`}>API latency</p>
+                  </div>
+                  <div className={`p-4 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-50'} text-center`}>
+                    <div className="flex justify-center mb-2">
+                      <div className="w-16 h-16 rounded-full border-4 border-purple-500 flex items-center justify-center">
+                        <span className="text-2xl font-bold text-purple-500">42</span>
+                      </div>
+                    </div>
+                    <p className="font-medium">Active Users</p>
+                    <p className={`text-xs ${mutedClass}`}>Current sessions</p>
+                  </div>
+                  <div className={`p-4 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-50'} text-center`}>
+                    <div className="flex justify-center mb-2">
+                      <div className={`w-16 h-16 rounded-full border-4 ${settings.system.maintenanceMode ? 'border-red-500' : 'border-green-500'} flex items-center justify-center`}>
+                        <span className={`text-2xl font-bold ${settings.system.maintenanceMode ? 'text-red-500' : 'text-green-500'}`}>
+                          {settings.system.maintenanceMode ? 'OFF' : 'ON'}
+                        </span>
+                      </div>
+                    </div>
+                    <p className="font-medium">System Status</p>
+                    <p className={`text-xs ${mutedClass}`}>{settings.system.maintenanceMode ? 'Maintenance' : 'Operational'}</p>
+                  </div>
+                </div>
+
+                {/* System Controls */}
+                <div className={`p-4 rounded-lg ${darkMode ? 'bg-gray-700' : 'bg-gray-50'}`}>
+                  <h3 className="font-medium mb-4 flex items-center gap-2">
+                    <Settings className="w-4 h-4 text-blue-500" /> System Controls
+                  </h3>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between py-2">
+                      <div>
+                        <span className={labelClass}>Maintenance Mode</span>
+                        <p className={`text-xs ${mutedClass}`}>Disable the app for all non-admin users</p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={settings.system.maintenanceMode}
+                          onChange={(e) => setSettings({
+                            ...settings,
+                            system: { ...settings.system, maintenanceMode: e.target.checked }
+                          })}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-red-600 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+                      </label>
+                    </div>
+                    <div className="flex items-center justify-between py-2">
+                      <div>
+                        <span className={labelClass}>Debug Mode</span>
+                        <p className={`text-xs ${mutedClass}`}>Enable detailed error logging</p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={settings.system.debugMode}
+                          onChange={(e) => setSettings({
+                            ...settings,
+                            system: { ...settings.system, debugMode: e.target.checked }
+                          })}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-blue-600 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all"></div>
+                      </label>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className={labelClass}>Log Level</span>
+                      <select
+                        value={settings.system.logLevel}
+                        onChange={(e) => setSettings({
+                          ...settings,
+                          system: { ...settings.system, logLevel: e.target.value }
+                        })}
+                        className={`w-40 border rounded-lg px-3 py-1.5 ${inputClass}`}
+                      >
+                        <option value="debug">Debug</option>
+                        <option value="info">Info</option>
+                        <option value="warn">Warning</option>
+                        <option value="error">Error</option>
+                      </select>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className={labelClass}>Max Upload Size (MB)</span>
+                      <input
+                        type="number"
+                        value={settings.system.maxUploadSize}
+                        onChange={(e) => setSettings({
+                          ...settings,
+                          system: { ...settings.system, maxUploadSize: parseInt(e.target.value) }
+                        })}
+                        className={`w-24 border rounded-lg px-3 py-1.5 ${inputClass}`}
+                      />
+                    </div>
+                    <div>
+                      <label className={`block text-sm mb-1 ${labelClass}`}>Allowed File Types</label>
+                      <input
+                        type="text"
+                        value={settings.system.allowedFileTypes}
+                        onChange={(e) => setSettings({
+                          ...settings,
+                          system: { ...settings.system, allowedFileTypes: e.target.value }
+                        })}
+                        className={`w-full border rounded-lg px-3 py-2 ${inputClass}`}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Danger Zone */}
+                <div className={`p-4 rounded-lg border-2 border-red-300 dark:border-red-700 ${darkMode ? 'bg-red-900/10' : 'bg-red-50'}`}>
+                  <h3 className="font-medium mb-4 flex items-center gap-2 text-red-600">
+                    <AlertCircle className="w-5 h-5" /> Danger Zone
+                  </h3>
+                  <p className={`text-sm ${mutedClass} mb-4`}>
+                    These actions can affect your entire system. Please proceed with caution.
+                  </p>
+                  <div className="flex flex-wrap gap-3">
+                    <button
+                      onClick={async () => {
+                        if (!window.confirm('Are you sure you want to clear the application cache?')) return;
+                        try {
+                          await apiClient.post('/cache/clear');
+                          alert('✅ Cache cleared successfully!');
+                        } catch (error) {
+                          alert('❌ Failed to clear cache');
+                        }
+                      }}
+                      className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 text-sm"
+                    >
+                      Clear Cache
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (!window.confirm('This will restart the server. All active sessions will be terminated. Continue?')) return;
+                        try {
+                          await apiClient.post('/system/restart');
+                          alert('✅ Server restart initiated!');
+                        } catch (error) {
+                          alert('❌ Failed to restart server');
+                        }
+                      }}
+                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 text-sm"
+                    >
+                      Restart Server
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (!window.confirm('WARNING: This will permanently delete all system logs. This cannot be undone.')) return;
+                        try {
+                          await apiClient.delete('/system/logs');
+                          alert('✅ Logs cleared!');
+                        } catch (error) {
+                          alert('❌ Failed to clear logs');
+                        }
+                      }}
+                      className="px-4 py-2 bg-red-700 text-white rounded-lg hover:bg-red-800 text-sm"
+                    >
+                      Clear All Logs
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Placeholder for any future tabs */}
+            {!['general', 'appearance', 'notifications', 'api', 'database', 'server', 'security', 'payment', 'email', 'backup', 'system'].includes(activeTab) && (
               <div className="text-center py-12">
                 <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                <p className={mutedClass}>Settings for {activeTab} coming soon...</p>
-                <p className={`text-sm ${mutedClass} mt-2`}>
-                  This section is under development.
-                </p>
+                <p className={mutedClass}>Settings for "{activeTab}" coming soon...</p>
               </div>
             )}
           </div>

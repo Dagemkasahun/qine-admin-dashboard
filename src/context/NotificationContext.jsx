@@ -19,8 +19,15 @@ export const NotificationProvider = ({ children }) => {
   const [socket, setSocket] = useState(null);
 
   useEffect(() => {
-    // HARDCODED PRODUCTION WEBSOCKET URL
-    const SOCKET_URL = 'https://qine-backend.onrender.com';
+    const getSocketUrl = () => {
+      if (import.meta.env.PROD) {
+        return 'https://qine-backend.onrender.com';
+      }
+      // Development - use same port as API server (5002)
+      return 'http://localhost:5002';
+    };
+
+    const SOCKET_URL = getSocketUrl();
     console.log('🔌 Connecting to WebSocket at:', SOCKET_URL);
 
     const newSocket = io(SOCKET_URL, {
@@ -33,6 +40,7 @@ export const NotificationProvider = ({ children }) => {
 
     newSocket.on('notification', (notification) => {
       addNotification(notification);
+      
       switch (notification.type) {
         case 'order':
           toast.success(`🆕 New Order: ${notification.message}`);
@@ -59,20 +67,27 @@ export const NotificationProvider = ({ children }) => {
         message: `Order #${data.orderNumber} is now ${data.status}`,
         timestamp: new Date(),
         read: false,
+        link: `/orders/${data.orderNumber}`
       });
     });
 
     newSocket.on('connect', () => {
-      console.log('🔌 WebSocket connected to production server');
+      console.log('🔌 WebSocket connected to', SOCKET_URL);
       newSocket.emit('joinAdminRoom');
     });
 
     newSocket.on('connect_error', (error) => {
-      console.error('🔌 WebSocket connection error:', error);
+      console.warn('🔌 WebSocket connection failed (non-critical):', error.message);
+    });
+
+    newSocket.on('disconnect', () => {
+      console.log('🔌 WebSocket disconnected');
     });
 
     return () => {
-      newSocket.disconnect();
+      if (newSocket) {
+        newSocket.disconnect();
+      }
     };
   }, []);
 
