@@ -36,7 +36,6 @@ const MerchantPage = () => {
     coverImage: null,
     logo: null,
     joinedDate: '',
-    // New fields for company profile
     foundedYear: '',
     employees: '',
     website: '',
@@ -46,20 +45,16 @@ const MerchantPage = () => {
       twitter: '',
       linkedin: ''
     },
-    businessHours: {
-      monday: { open: '09:00', close: '18:00', closed: false },
-      tuesday: { open: '09:00', close: '18:00', closed: false },
-      wednesday: { open: '09:00', close: '18:00', closed: false },
-      thursday: { open: '09:00', close: '18:00', closed: false },
-      friday: { open: '09:00', close: '18:00', closed: false },
-      saturday: { open: '10:00', close: '15:00', closed: false },
-      sunday: { open: '00:00', close: '00:00', closed: true }
-    },
-    achievements: [],
-    certifications: [],
+    businessHours: {},  // Will be populated from API
+    achievements: [],    // From API
+    certifications: [],  // From API
     managerName: '',
     managerPhone: '',
-    managerEmail: ''
+    managerEmail: '',
+    // Stats from API
+    totalProducts: 0,
+    totalOrders: 0,
+    rating: 0,
   });
 
   // Fetch merchant data
@@ -72,16 +67,16 @@ const MerchantPage = () => {
           name: data.businessName,
           type: data.businessType,
           category: data.category,
-          description: data.description,
-          location: data.address,
+          description: data.description || '',
+          location: data.address || '',
           status: data.status,
           email: data.businessEmail,
           phone: data.businessPhone,
           coverImage: data.coverImage,
           logo: data.logo,
-          joinedDate: new Date(data.createdAt).toLocaleDateString(),
-          foundedYear: data.foundedYear || '2015',
-          employees: data.employees || '10-25',
+          joinedDate: data.createdAt ? new Date(data.createdAt).toLocaleDateString() : '',
+          foundedYear: data.foundedYear || '',
+          employees: data.employees || '',
           website: data.website || '',
           socialMedia: data.socialMedia || {
             facebook: '',
@@ -89,20 +84,16 @@ const MerchantPage = () => {
             twitter: '',
             linkedin: ''
           },
-          businessHours: data.businessHours || businessModel.businessHours,
-          achievements: data.achievements || [
-            'Certified Ethiopian Exporters Association',
-            'ISO 22000:2018 Food Safety Certified',
-            'Best Organic Product Award 2023'
-          ],
-          certifications: data.certifications || [
-            'Organic Farming Certificate',
-            'Quality Management System ISO 9001',
-            'Fair Trade Certified'
-          ],
-          managerName: data.managerName || data.owner?.firstName + ' ' + data.owner?.lastName,
+          businessHours: data.businessHours || {},  // Use API data, no defaults
+          achievements: data.achievements || [],
+          certifications: data.certifications || [],
+          managerName: data.managerName || (data.owner ? `${data.owner.firstName || ''} ${data.owner.lastName || ''}`.trim() : ''),
           managerPhone: data.managerPhone || data.businessPhone,
-          managerEmail: data.managerEmail || data.businessEmail
+          managerEmail: data.managerEmail || data.businessEmail,
+          // Stats - these should come from a proper stats endpoint
+          totalProducts: data._count?.products || 0,
+          totalOrders: data._count?.orders || 0,
+          rating: data.rating || 0,
         });
       } catch (error) {
         console.error('Error fetching merchant:', error);
@@ -114,7 +105,7 @@ const MerchantPage = () => {
     }
   }, [merchantId]);
 
-  // Navigation tabs - Updated with Company Profile tab
+  // Navigation tabs
   const navTabs = [
     { id: 'dashboard', path: '', label: 'Dashboard', icon: Home, exact: true },
     { id: 'products', path: 'products', label: 'Products', icon: Package },
@@ -125,7 +116,6 @@ const MerchantPage = () => {
     { id: 'staff', path: 'staff', label: 'Staff', icon: Users },
   ];
 
-  // --- HANDLERS ---
   const handleProfileUpdate = async (updatedData) => {
     try {
       setLoading(true);
@@ -250,7 +240,7 @@ const MerchantPage = () => {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 lg:py-8">
-        {/* Business Header Card - Enhanced */}
+        {/* Business Header Card */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 mb-6 overflow-hidden">
           {/* Cover Image Area */}
           <div className="h-32 sm:h-48 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 relative group">
@@ -272,7 +262,7 @@ const MerchantPage = () => {
             </button>
           </div>
 
-          {/* Profile Details Area - Enhanced with more info */}
+          {/* Profile Details Area */}
           <div className="px-6 pb-6 -mt-10">
             <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
               <div className="flex items-end gap-4">
@@ -304,7 +294,9 @@ const MerchantPage = () => {
                   <div className="flex flex-wrap gap-3 mt-1 text-[9px] font-bold text-slate-400 uppercase tracking-wider">
                     <span className="flex items-center gap-1"><MapPin className="w-3 h-3" /> {businessModel.location}</span>
                     <span className="flex items-center gap-1"><Package className="w-3 h-3" /> {businessModel.category}</span>
-                    <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> Est. {businessModel.foundedYear}</span>
+                    {businessModel.foundedYear && (
+                      <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> Est. {businessModel.foundedYear}</span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -325,29 +317,29 @@ const MerchantPage = () => {
               </div>
             </div>
 
-            {/* Quick Stats Row */}
+            {/* Quick Stats Row - Now using real data */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-4 border-t border-slate-100">
               <div className="text-center">
                 <p className="text-[10px] font-black text-slate-400 uppercase">Total Products</p>
-                <p className="text-lg font-bold text-slate-800">156</p>
+                <p className="text-lg font-bold text-slate-800">{businessModel.totalProducts || 0}</p>
               </div>
               <div className="text-center">
                 <p className="text-[10px] font-black text-slate-400 uppercase">Total Orders</p>
-                <p className="text-lg font-bold text-slate-800">1,234</p>
+                <p className="text-lg font-bold text-slate-800">{businessModel.totalOrders || 0}</p>
               </div>
               <div className="text-center">
                 <p className="text-[10px] font-black text-slate-400 uppercase">Rating</p>
-                <p className="text-lg font-bold text-yellow-500">★ 4.8</p>
+                <p className="text-lg font-bold text-yellow-500">★ {businessModel.rating || 0}</p>
               </div>
               <div className="text-center">
                 <p className="text-[10px] font-black text-slate-400 uppercase">Employees</p>
-                <p className="text-lg font-bold text-slate-800">{businessModel.employees}</p>
+                <p className="text-lg font-bold text-slate-800">{businessModel.employees || '—'}</p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Tab Navigation - Updated with Company tab */}
+        {/* Tab Navigation */}
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm mb-6 overflow-x-auto">
           <div className="flex min-w-max">
             {navTabs.map((tab) => (
@@ -427,7 +419,7 @@ const MerchantPage = () => {
         </div>
       )}
 
-      {/* Profile Modal - Enhanced with company info fields */}
+      {/* Profile Modal */}
       {isProfileModalOpen && (
         <ProfileModal 
           businessModel={businessModel}
@@ -439,19 +431,20 @@ const MerchantPage = () => {
   );
 };
 
-// Enhanced Profile Modal Component with Company Information
+// Profile Modal Component
 const ProfileModal = ({ businessModel, onClose, onSave }) => {
   const [formData, setFormData] = useState({
-    name: businessModel.name,
-    description: businessModel.description,
-    location: businessModel.location,
-    phone: businessModel.phone,
-    email: businessModel.email,
+    name: businessModel.name || '',
+    description: businessModel.description || '',
+    location: businessModel.location || '',
+    phone: businessModel.phone || '',
+    email: businessModel.email || '',
     coverImage: businessModel.coverImage,
     logo: businessModel.logo,
     foundedYear: businessModel.foundedYear || '',
     employees: businessModel.employees || '',
     website: businessModel.website || '',
+    city: businessModel.city || '',
     managerName: businessModel.managerName || '',
     managerPhone: businessModel.managerPhone || '',
     managerEmail: businessModel.managerEmail || '',
@@ -461,15 +454,7 @@ const ProfileModal = ({ businessModel, onClose, onSave }) => {
       twitter: '',
       linkedin: ''
     },
-    businessHours: businessModel.businessHours || {
-      monday: { open: '09:00', close: '18:00', closed: false },
-      tuesday: { open: '09:00', close: '18:00', closed: false },
-      wednesday: { open: '09:00', close: '18:00', closed: false },
-      thursday: { open: '09:00', close: '18:00', closed: false },
-      friday: { open: '09:00', close: '18:00', closed: false },
-      saturday: { open: '10:00', close: '15:00', closed: false },
-      sunday: { open: '00:00', close: '00:00', closed: true }
-    }
+    businessHours: businessModel.businessHours || {}  // No default values
   });
   
   const [activeTab, setActiveTab] = useState('basic');
@@ -532,10 +517,21 @@ const ProfileModal = ({ businessModel, onClose, onSave }) => {
     }
   };
 
+  // Helper to check if businessHours exist for a day
+  const getHourValue = (day, field, defaultValue = '') => {
+    return formData.businessHours[day]?.[field] ?? defaultValue;
+  };
+
+  const getClosedValue = (day) => {
+    return formData.businessHours[day]?.closed ?? false;
+  };
+
+  const daysOfWeek = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl">
-        <div className="sticky top-0 bg-white p-6 border-b border-slate-100 flex justify-between items-center">
+        <div className="sticky top-0 bg-white p-6 border-b border-slate-100 flex justify-between items-center z-10">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-slate-100 rounded-lg">
               <Settings className="w-5 h-5 text-slate-600" />
@@ -823,41 +819,45 @@ const ProfileModal = ({ businessModel, onClose, onSave }) => {
           {/* Business Hours Tab */}
           {activeTab === 'hours' && (
             <>
-              <div className="space-y-3">
-                {['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map((day) => (
-                  <div key={day} className="flex items-center gap-4 p-3 bg-slate-50 rounded-xl">
-                    <div className="w-24">
-                      <span className="font-semibold text-slate-700 capitalize">{day}</span>
+              {daysOfWeek.length === 0 ? (
+                <p className="text-slate-500 text-center py-8">No business hours configured.</p>
+              ) : (
+                <div className="space-y-3">
+                  {daysOfWeek.map((day) => (
+                    <div key={day} className="flex items-center gap-4 p-3 bg-slate-50 rounded-xl flex-wrap sm:flex-nowrap">
+                      <div className="w-24">
+                        <span className="font-semibold text-slate-700 capitalize">{day}</span>
+                      </div>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={getClosedValue(day)}
+                          onChange={(e) => handleBusinessHoursChange(day, 'closed', e.target.checked)}
+                          className="rounded"
+                        />
+                        <span className="text-sm text-slate-500">Closed</span>
+                      </label>
+                      {!getClosedValue(day) && (
+                        <>
+                          <input
+                            type="time"
+                            value={getHourValue(day, 'open', '09:00')}
+                            onChange={(e) => handleBusinessHoursChange(day, 'open', e.target.value)}
+                            className="p-2 bg-white border border-slate-200 rounded-lg outline-none"
+                          />
+                          <span>to</span>
+                          <input
+                            type="time"
+                            value={getHourValue(day, 'close', '18:00')}
+                            onChange={(e) => handleBusinessHoursChange(day, 'close', e.target.value)}
+                            className="p-2 bg-white border border-slate-200 rounded-lg outline-none"
+                          />
+                        </>
+                      )}
                     </div>
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={formData.businessHours[day].closed}
-                        onChange={(e) => handleBusinessHoursChange(day, 'closed', e.target.checked)}
-                        className="rounded"
-                      />
-                      <span className="text-sm text-slate-500">Closed</span>
-                    </label>
-                    {!formData.businessHours[day].closed && (
-                      <>
-                        <input
-                          type="time"
-                          value={formData.businessHours[day].open}
-                          onChange={(e) => handleBusinessHoursChange(day, 'open', e.target.value)}
-                          className="p-2 bg-white border border-slate-200 rounded-lg outline-none"
-                        />
-                        <span>to</span>
-                        <input
-                          type="time"
-                          value={formData.businessHours[day].close}
-                          onChange={(e) => handleBusinessHoursChange(day, 'close', e.target.value)}
-                          className="p-2 bg-white border border-slate-200 rounded-lg outline-none"
-                        />
-                      </>
-                    )}
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </>
           )}
 

@@ -15,22 +15,14 @@ const SalesAnalytics = () => {
   const [loading, setLoading] = useState(false);
   const [analytics, setAnalytics] = useState({
     stats: {
-      totalRevenue: 142850,
-      totalOrders: 384,
-      newCustomers: 128,
-      avgOrderValue: 372
+      totalRevenue: 0,
+      totalOrders: 0,
+      newCustomers: 0,
+      avgOrderValue: 0
     },
-    topProducts: [
-      { name: 'White Honey (500g)', sales: 142, revenue: 49700, growth: '+15%' },
-      { name: 'Forest Honey (1kg)', sales: 89, revenue: 53400, growth: '+8%' },
-      { name: 'Beeswax Candles', sales: 64, revenue: 7680, growth: '-3%' },
-    ],
-    dailyData: [45, 60, 40, 75, 50, 90, 65, 80, 55, 100, 85, 95],
-    categoryData: [
-      { name: 'Honey', percentage: 65, revenue: 92850 },
-      { name: 'Wax Products', percentage: 20, revenue: 28570 },
-      { name: 'Equipment', percentage: 15, revenue: 21430 }
-    ]
+    topProducts: [],
+    dailyData: [],
+    categoryData: []
   });
 
   useEffect(() => {
@@ -44,19 +36,23 @@ const SalesAnalytics = () => {
       // Get date range based on selected timeRange
       let startDate, endDate;
       const now = new Date();
+      const clonedNow = new Date(now);
       
       switch(timeRange) {
         case 'Last 7 Days':
-          startDate = new Date(now.setDate(now.getDate() - 7));
+          startDate = new Date(clonedNow.setDate(clonedNow.getDate() - 7));
           break;
         case 'Last 30 Days':
-          startDate = new Date(now.setDate(now.getDate() - 30));
+          startDate = new Date(clonedNow.setDate(clonedNow.getDate() - 30));
           break;
         case 'Last 90 Days':
-          startDate = new Date(now.setDate(now.getDate() - 90));
+          startDate = new Date(clonedNow.setDate(clonedNow.getDate() - 90));
+          break;
+        case 'This Year':
+          startDate = new Date(clonedNow.getFullYear(), 0, 1);
           break;
         default:
-          startDate = new Date(now.setDate(now.getDate() - 30));
+          startDate = new Date(clonedNow.setDate(clonedNow.getDate() - 30));
       }
       
       endDate = new Date();
@@ -73,25 +69,53 @@ const SalesAnalytics = () => {
       
       setAnalytics({
         stats: {
-          totalRevenue: data.summary?.totalRevenue || 142850,
-          totalOrders: data.summary?.totalOrders || 384,
-          newCustomers: data.summary?.newCustomers || 128,
-          avgOrderValue: data.summary?.averageOrderValue || 372
+          totalRevenue: data.summary?.totalRevenue || 0,
+          totalOrders: data.summary?.totalOrders || 0,
+          newCustomers: data.summary?.newCustomers || 0,
+          avgOrderValue: data.summary?.averageOrderValue || 0
         },
-        topProducts: data.topProducts || analytics.topProducts,
-        dailyData: data.daily?.map(d => d.revenue / 1000) || analytics.dailyData,
-        categoryData: data.categoryBreakdown || analytics.categoryData
+        topProducts: data.topProducts || [],
+        dailyData: data.daily?.map(d => (d.revenue / 1000)) || [],
+        categoryData: data.categoryBreakdown || []
       });
     } catch (error) {
       console.error('Error fetching analytics:', error);
-      // Keep using mock data
+      // Set empty state on error instead of mock data
+      setAnalytics({
+        stats: {
+          totalRevenue: 0,
+          totalOrders: 0,
+          newCustomers: 0,
+          avgOrderValue: 0
+        },
+        topProducts: [],
+        dailyData: [],
+        categoryData: []
+      });
     } finally {
       setLoading(false);
     }
   };
 
-  const downloadReport = () => {
-    alert('📊 Report download started!');
+  const downloadReport = async () => {
+    try {
+      const response = await apiClient.get(`/reports/sales/export`, {
+        params: { merchantId, format: 'csv' },
+        responseType: 'blob'
+      });
+      
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `sales_report_${merchantId}_${Date.now()}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error downloading report:', error);
+      alert('Failed to download report. Please try again.');
+    }
   };
 
   const printReport = () => {
@@ -102,11 +126,31 @@ const SalesAnalytics = () => {
     return `ETB ${amount?.toLocaleString() || 0}`;
   };
 
+  const getGrowthRate = () => {
+    if (analytics.dailyData.length < 2) return '+0%';
+    const firstHalf = analytics.dailyData.slice(0, Math.floor(analytics.dailyData.length / 2));
+    const secondHalf = analytics.dailyData.slice(Math.floor(analytics.dailyData.length / 2));
+    const firstAvg = firstHalf.reduce((a, b) => a + b, 0) / firstHalf.length;
+    const secondAvg = secondHalf.reduce((a, b) => a + b, 0) / secondHalf.length;
+    const growth = ((secondAvg - firstAvg) / firstAvg) * 100;
+    return `${growth >= 0 ? '+' : ''}${growth.toFixed(1)}%`;
+  };
+
+  const getHighestDailyRevenue = () => {
+    if (analytics.dailyData.length === 0) return 0;
+    return Math.max(...analytics.dailyData) * 1000;
+  };
+
+  const getAverageDailyRevenue = () => {
+    if (analytics.dailyData.length === 0) return 0;
+    return Math.round(analytics.dailyData.reduce((a, b) => a + b, 0) / analytics.dailyData.length * 1000);
+  };
+
   const stats = [
     { 
       label: 'Total Revenue', 
       value: formatCurrency(analytics.stats.totalRevenue), 
-      change: '+12.5%', 
+      change: '+0%',
       trend: 'up', 
       icon: DollarSign, 
       color: 'text-blue-600', 
@@ -115,7 +159,7 @@ const SalesAnalytics = () => {
     { 
       label: 'Total Orders', 
       value: analytics.stats.totalOrders.toString(), 
-      change: '+18.2%', 
+      change: '+0%',
       trend: 'up', 
       icon: ShoppingBag, 
       color: 'text-purple-600', 
@@ -124,8 +168,8 @@ const SalesAnalytics = () => {
     { 
       label: 'New Customers', 
       value: analytics.stats.newCustomers.toString(), 
-      change: '-2.4%', 
-      trend: 'down', 
+      change: '+0%',
+      trend: 'up', 
       icon: Users, 
       color: 'text-orange-600', 
       bg: 'bg-orange-50' 
@@ -133,7 +177,7 @@ const SalesAnalytics = () => {
     { 
       label: 'Avg. Order Value', 
       value: formatCurrency(analytics.stats.avgOrderValue), 
-      change: '+5.1%', 
+      change: '+0%',
       trend: 'up', 
       icon: Activity, 
       color: 'text-emerald-600', 
@@ -162,7 +206,7 @@ const SalesAnalytics = () => {
             Sales & Insights
           </h1>
           <p className="text-slate-500 text-sm font-medium">
-            Financial performance and growth metrics for {businessModel?.name}
+            Financial performance and growth metrics for {businessModel?.name || 'your business'}
           </p>
         </div>
         
@@ -209,12 +253,6 @@ const SalesAnalytics = () => {
               <div className={`${stat.bg} ${stat.color} p-3 rounded-2xl group-hover:scale-110 transition-transform`}>
                 <stat.icon className="w-6 h-6" />
               </div>
-              <span className={`flex items-center gap-1 text-[10px] font-black px-2 py-1 rounded-lg ${
-                stat.trend === 'up' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'
-              }`}>
-                {stat.trend === 'up' ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                {stat.change}
-              </span>
             </div>
             <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">{stat.label}</p>
             <h3 className="text-2xl font-black text-slate-900 mt-1">{stat.value}</h3>
@@ -236,42 +274,46 @@ const SalesAnalytics = () => {
             </div>
           </div>
           
-          {/* Bar Chart */}
-          <div className="flex items-end justify-between h-64 gap-2 px-4">
-            {analytics.dailyData.map((height, i) => (
-              <div key={i} className="flex-1 flex flex-col items-center gap-2 group">
-                <div className="relative w-full">
-                  <div 
-                    className="w-full bg-gradient-to-t from-blue-600 to-blue-400 rounded-t-lg transition-all group-hover:from-blue-500 group-hover:to-blue-300 cursor-pointer" 
-                    style={{ height: `${Math.min(height, 100)}%`, minHeight: '4px' }}
-                  >
-                    <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[9px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                      ETB {Math.round(height * 1000).toLocaleString()}
+          {/* Bar Chart - Shows empty state when no data */}
+          {analytics.dailyData.length === 0 ? (
+            <div className="flex items-center justify-center h-64 bg-slate-50 rounded-xl">
+              <p className="text-slate-400">No revenue data available for this period</p>
+            </div>
+          ) : (
+            <div className="flex items-end justify-between h-64 gap-2 px-4">
+              {analytics.dailyData.map((height, i) => (
+                <div key={i} className="flex-1 flex flex-col items-center gap-2 group">
+                  <div className="relative w-full">
+                    <div 
+                      className="w-full bg-gradient-to-t from-blue-600 to-blue-400 rounded-t-lg transition-all group-hover:from-blue-500 group-hover:to-blue-300 cursor-pointer" 
+                      style={{ height: `${Math.min(Math.max(height, 0), 100)}%`, minHeight: '4px' }}
+                    >
+                      <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[9px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                        ETB {Math.round(height * 1000).toLocaleString()}
+                      </div>
                     </div>
                   </div>
+                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">
+                    {i === 0 ? 'Week 1' : i === 3 ? 'Week 2' : i === 6 ? 'Week 3' : i === 9 ? 'Week 4' : ''}
+                  </span>
                 </div>
-                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">
-                  {i === 0 ? 'Week 1' : i === 3 ? 'Week 2' : i === 6 ? 'Week 3' : i === 9 ? 'Week 4' : ''}
-                </span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
 
           {/* Summary Stats */}
           <div className="grid grid-cols-3 gap-4 mt-8 pt-6 border-t border-slate-100">
             <div className="text-center">
               <p className="text-[9px] font-black text-slate-400 uppercase">Highest Day</p>
-              <p className="text-sm font-bold text-slate-900">ETB {Math.max(...analytics.dailyData) * 1000}</p>
+              <p className="text-sm font-bold text-slate-900">{formatCurrency(getHighestDailyRevenue())}</p>
             </div>
             <div className="text-center">
               <p className="text-[9px] font-black text-slate-400 uppercase">Average Day</p>
-              <p className="text-sm font-bold text-slate-900">
-                ETB {Math.round(analytics.dailyData.reduce((a,b) => a + b, 0) / analytics.dailyData.length * 1000)}
-              </p>
+              <p className="text-sm font-bold text-slate-900">{formatCurrency(getAverageDailyRevenue())}</p>
             </div>
             <div className="text-center">
               <p className="text-[9px] font-black text-slate-400 uppercase">Growth Rate</p>
-              <p className="text-sm font-bold text-emerald-600">+15.3%</p>
+              <p className="text-sm font-bold text-emerald-600">{getGrowthRate()}</p>
             </div>
           </div>
         </div>
@@ -281,28 +323,34 @@ const SalesAnalytics = () => {
           <h3 className="font-black text-slate-900 uppercase tracking-tight mb-6 flex items-center gap-2">
             <PieChart className="w-5 h-5 text-orange-500" /> Category Breakdown
           </h3>
-          <div className="space-y-6">
-            {analytics.categoryData.map((category, i) => (
-              <div key={i} className="group cursor-pointer">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-sm font-bold text-slate-800">{category.name}</span>
-                  <span className="text-xs font-black text-slate-900">{formatCurrency(category.revenue)}</span>
+          {analytics.categoryData.length === 0 ? (
+            <div className="flex items-center justify-center h-64 bg-slate-50 rounded-xl">
+              <p className="text-slate-400">No category data available</p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {analytics.categoryData.map((category, i) => (
+                <div key={i} className="group cursor-pointer">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-sm font-bold text-slate-800">{category.name}</span>
+                    <span className="text-xs font-black text-slate-900">{formatCurrency(category.revenue)}</span>
+                  </div>
+                  <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                    <div 
+                      className={`h-full rounded-full transition-all duration-1000 ${
+                        i === 0 ? 'bg-blue-600' : i === 1 ? 'bg-orange-500' : 'bg-emerald-500'
+                      }`}
+                      style={{ width: `${Math.min(category.percentage, 100)}%` }}
+                    ></div>
+                  </div>
+                  <div className="flex justify-between mt-2">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase">{category.percentage}% of total</span>
+                    <span className="text-[10px] font-bold text-slate-500">{category.sales || 0} units</span>
+                  </div>
                 </div>
-                <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                  <div 
-                    className={`h-full rounded-full transition-all duration-1000 ${
-                      i === 0 ? 'bg-blue-600' : i === 1 ? 'bg-orange-500' : 'bg-emerald-500'
-                    }`}
-                    style={{ width: `${category.percentage}%` }}
-                  ></div>
-                </div>
-                <div className="flex justify-between mt-2">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase">{category.percentage}% of total</span>
-                  <span className="text-[10px] font-bold text-slate-500">{category.sales || 0} units</span>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -317,44 +365,44 @@ const SalesAnalytics = () => {
           </button>
         </div>
         
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-slate-50 rounded-xl">
-              <tr>
-                <th className="px-6 py-4 text-left text-[9px] font-black text-slate-400 uppercase tracking-widest">Product</th>
-                <th className="px-6 py-4 text-right text-[9px] font-black text-slate-400 uppercase tracking-widest">Units Sold</th>
-                <th className="px-6 py-4 text-right text-[9px] font-black text-slate-400 uppercase tracking-widest">Revenue</th>
-                <th className="px-6 py-4 text-right text-[9px] font-black text-slate-400 uppercase tracking-widest">Growth</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {analytics.topProducts.map((product, i) => (
-                <tr key={i} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-gradient-to-br from-blue-100 to-blue-200 rounded-lg flex items-center justify-center">
-                        <Package className="w-4 h-4 text-blue-600" />
-                      </div>
-                      <span className="font-bold text-slate-800 text-sm">{product.name}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 text-right font-medium text-slate-700">{product.sales} units</td>
-                  <td className="px-6 py-4 text-right font-bold text-slate-900">{formatCurrency(product.revenue)}</td>
-                  <td className="px-6 py-4 text-right">
-                    <span className={`inline-flex items-center gap-1 text-[10px] font-black px-2 py-1 rounded-lg ${
-                      product.growth.startsWith('+') ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'
-                    }`}>
-                      {product.growth.startsWith('+') ? <ArrowUpRight className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                      {product.growth}
-                    </span>
-                  </td>
+        {analytics.topProducts.length === 0 ? (
+          <div className="flex items-center justify-center h-64 bg-slate-50 rounded-xl">
+            <p className="text-slate-400">No product sales data available</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-slate-50 rounded-xl">
+                <tr>
+                  <th className="px-6 py-4 text-left text-[9px] font-black text-slate-400 uppercase tracking-widest">Product</th>
+                  <th className="px-6 py-4 text-right text-[9px] font-black text-slate-400 uppercase tracking-widest">Units Sold</th>
+                  <th className="px-6 py-4 text-right text-[9px] font-black text-slate-400 uppercase tracking-widest">Revenue</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {analytics.topProducts.map((product, i) => (
+                  <tr key={i} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-gradient-to-br from-blue-100 to-blue-200 rounded-lg flex items-center justify-center">
+                          <Package className="w-4 h-4 text-blue-600" />
+                        </div>
+                        <span className="font-bold text-slate-800 text-sm">{product.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-right font-medium text-slate-700">{product.sales} units</td>
+                    <td className="px-6 py-4 text-right font-bold text-slate-900">{formatCurrency(product.revenue)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
 
-        <button className="w-full mt-8 py-4 border-2 border-slate-100 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 hover:bg-slate-50 hover:text-slate-600 transition-all flex items-center justify-center gap-2">
+        <button 
+          onClick={downloadReport}
+          className="w-full mt-8 py-4 border-2 border-slate-100 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 hover:bg-slate-50 hover:text-slate-600 transition-all flex items-center justify-center gap-2"
+        >
           Download Complete Sales Report <Download className="w-4 h-4" />
         </button>
       </div>

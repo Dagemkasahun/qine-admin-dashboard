@@ -944,7 +944,6 @@ app.get('/api/users/:userId/activity', authenticateAdmin, async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
-
 // ============================================
 // MERCHANT API
 // ============================================
@@ -978,15 +977,43 @@ app.get('/api/merchants', async (req, res) => {
       },
       orderBy: { createdAt: 'desc' }
     });
-    console.log(`📋 Fetched ${merchants.length} merchants (full)`);
-    res.json(merchants);
+    
+    // Parse configuration for each merchant
+    const merchantsWithConfig = merchants.map(merchant => {
+      let configuration = {};
+      let businessHours = {};
+      try {
+        if (merchant.configuration) {
+          configuration = typeof merchant.configuration === 'string' 
+            ? JSON.parse(merchant.configuration) 
+            : merchant.configuration;
+          businessHours = configuration.businessHours || {};
+        }
+      } catch (e) {}
+      
+      return {
+        ...merchant,
+        businessHours,
+        foundedYear: configuration.foundedYear,
+        employees: configuration.employees,
+        socialMedia: configuration.socialMedia,
+        achievements: configuration.achievements,
+        certifications: configuration.certifications,
+        managerName: configuration.managerName,
+        managerPhone: configuration.managerPhone,
+        managerEmail: configuration.managerEmail,
+      };
+    });
+    
+    console.log(`📋 Fetched ${merchantsWithConfig.length} merchants (full)`);
+    res.json(merchantsWithConfig);
   } catch (error) {
     console.error('Error fetching merchants:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
-// Get merchant by ID
+// Get merchant by ID (UPDATED to include businessHours)
 app.get('/api/merchants/:id', async (req, res) => {
   try {
     const merchant = await prisma.merchant.findUnique({
@@ -994,11 +1021,113 @@ app.get('/api/merchants/:id', async (req, res) => {
       include: {
         owner: { select: { id: true, firstName: true, lastName: true, email: true, phone: true } },
         products: { include: { category: true }, orderBy: { createdAt: 'desc' } },
-        categories: true, orders: { take: 10, orderBy: { createdAt: 'desc' } }
+        categories: true,
+        orders: { take: 10, orderBy: { createdAt: 'desc' } }
       }
     });
+    
     if (!merchant) return res.status(404).json({ error: 'Merchant not found' });
-    res.json(merchant);
+    
+    // Parse configuration JSON to extract businessHours and other company details
+    let configuration = {};
+    let businessHours = {};
+    let foundedYear = null;
+    let employees = null;
+    let socialMedia = {};
+    let achievements = [];
+    let certifications = [];
+    let managerName = '';
+    let managerPhone = '';
+    let managerEmail = '';
+    
+    try {
+      if (merchant.configuration) {
+        configuration = typeof merchant.configuration === 'string' 
+          ? JSON.parse(merchant.configuration) 
+          : merchant.configuration;
+        
+        // Extract business hours from configuration
+        businessHours = configuration.businessHours || {};
+        
+        // Extract other company details
+        foundedYear = configuration.foundedYear || null;
+        employees = configuration.employees || null;
+        socialMedia = configuration.socialMedia || {};
+        achievements = configuration.achievements || [];
+        certifications = configuration.certifications || [];
+        managerName = configuration.managerName || '';
+        managerPhone = configuration.managerPhone || '';
+        managerEmail = configuration.managerEmail || '';
+      }
+    } catch (e) {
+      console.error('Error parsing merchant configuration:', e);
+    }
+    
+    // Parse modules JSON
+    let modules = [];
+    try {
+      if (merchant.modules) {
+        modules = typeof merchant.modules === 'string' 
+          ? JSON.parse(merchant.modules) 
+          : merchant.modules;
+      }
+    } catch (e) {
+      console.error('Error parsing merchant modules:', e);
+    }
+    
+    // Parse deliveryConfig JSON
+    let deliveryConfig = {};
+    try {
+      if (merchant.deliveryConfig) {
+        deliveryConfig = typeof merchant.deliveryConfig === 'string' 
+          ? JSON.parse(merchant.deliveryConfig) 
+          : merchant.deliveryConfig;
+      }
+    } catch (e) {
+      console.error('Error parsing merchant deliveryConfig:', e);
+    }
+    
+    // Get stats (orders count, revenue, product count)
+    const [orderStats, productCount, reviewStats] = await Promise.all([
+      prisma.order.aggregate({
+        where: { merchantId: merchant.id },
+        _count: { id: true },
+        _sum: { total: true }
+      }),
+      prisma.product.count({ where: { merchantId: merchant.id, isActive: true } }),
+      prisma.review.aggregate({
+        where: { merchantId: merchant.id },
+        _avg: { rating: true },
+        _count: { id: true }
+      })
+    ]);
+    
+    // Return merchant with all parsed data
+    res.json({
+      ...merchant,
+      configuration,
+      modules,
+      deliveryConfig,
+      businessHours,
+      foundedYear,
+      employees,
+      socialMedia,
+      achievements,
+      certifications,
+      managerName,
+      managerPhone,
+      managerEmail,
+      _count: {
+        products: productCount,
+        orders: orderStats._count.id || 0,
+        reviews: reviewStats._count.id || 0
+      },
+      stats: {
+        totalRevenue: orderStats._sum.total || 0,
+        totalOrders: orderStats._count.id || 0,
+        avgRating: reviewStats._avg.rating || 0
+      }
+    });
   } catch (error) {
     console.error('Error fetching merchant:', error);
     res.status(500).json({ error: error.message });
@@ -1006,7 +1135,7 @@ app.get('/api/merchants/:id', async (req, res) => {
 });
 
 // ============================================
-// MERCHANT DASHBOARD API - NEW ENDPOINTS
+// MERCHANT DASHBOARD API
 // ============================================
 
 // Get merchant dashboard data (for merchant role)
@@ -1025,6 +1154,18 @@ app.get('/api/merchants/dashboard', authenticateMerchant, async (req, res) => {
     if (!merchant) {
       return res.status(404).json({ error: 'Merchant profile not found for this user' });
     }
+    
+    // Parse configuration
+    let configuration = {};
+    let businessHours = {};
+    try {
+      if (merchant.configuration) {
+        configuration = typeof merchant.configuration === 'string' 
+          ? JSON.parse(merchant.configuration) 
+          : merchant.configuration;
+        businessHours = configuration.businessHours || {};
+      }
+    } catch (e) {}
     
     // Get stats
     const totalOrders = await prisma.order.count({ where: { merchantId: merchant.id } });
@@ -1064,7 +1205,20 @@ app.get('/api/merchants/dashboard', authenticateMerchant, async (req, res) => {
     });
     
     res.json({
-      merchant,
+      merchant: {
+        ...merchant,
+        configuration,
+        businessHours,
+        foundedYear: configuration.foundedYear,
+        employees: configuration.employees,
+        website: configuration.website,
+        socialMedia: configuration.socialMedia,
+        managerName: configuration.managerName,
+        managerPhone: configuration.managerPhone,
+        managerEmail: configuration.managerEmail,
+        achievements: configuration.achievements || [],
+        certifications: configuration.certifications || [],
+      },
       stats: {
         totalRevenue: totalRevenue._sum.total || 0,
         totalOrders,
@@ -1184,10 +1338,40 @@ app.get('/api/merchants/:merchantId/sales-report', authenticateMerchant, async (
 app.post('/api/merchants', authenticateToken, async (req, res) => {
   try {
     const { ownerId, ...merchantData } = req.body;
+    
+    // Build configuration object from company details if provided
+    let configuration = {};
+    if (merchantData.foundedYear || merchantData.employees || merchantData.socialMedia || merchantData.businessHours) {
+      configuration = {
+        foundedYear: merchantData.foundedYear,
+        employees: merchantData.employees,
+        socialMedia: merchantData.socialMedia,
+        businessHours: merchantData.businessHours,
+        achievements: merchantData.achievements || [],
+        certifications: merchantData.certifications || [],
+        managerName: merchantData.managerName,
+        managerPhone: merchantData.managerPhone,
+        managerEmail: merchantData.managerEmail,
+      };
+    }
+    
     const merchant = await prisma.merchant.create({
-      data: { ...merchantData, ownerId: ownerId, status: 'PENDING', configuration: merchantData.configuration || '{}', modules: merchantData.modules || '[]', deliveryConfig: merchantData.deliveryConfig || '{}' }
+      data: { 
+        ...merchantData, 
+        ownerId: ownerId, 
+        status: 'PENDING', 
+        configuration: Object.keys(configuration).length > 0 ? JSON.stringify(configuration) : '{}',
+        modules: merchantData.modules || '[]', 
+        deliveryConfig: merchantData.deliveryConfig || '{}' 
+      }
     });
-    io.to('admin').emit('notification', { type: 'merchant', title: 'New Merchant Registration', message: `${merchant.businessName} has registered and is waiting for approval` });
+    
+    io.to('admin').emit('notification', { 
+      type: 'merchant', 
+      title: 'New Merchant Registration', 
+      message: `${merchant.businessName} has registered and is waiting for approval` 
+    });
+    
     res.json(merchant);
   } catch (error) {
     console.error('Error creating merchant:', error);
@@ -1198,10 +1382,50 @@ app.post('/api/merchants', authenticateToken, async (req, res) => {
 // Update merchant (PUT)
 app.put('/api/merchants/:id', authenticateToken, async (req, res) => {
   try {
+    const existingMerchant = await prisma.merchant.findUnique({ where: { id: req.params.id } });
+    if (!existingMerchant) return res.status(404).json({ error: 'Merchant not found' });
+    
+    // Parse existing configuration
+    let currentConfig = {};
+    try {
+      if (existingMerchant.configuration) {
+        currentConfig = typeof existingMerchant.configuration === 'string' 
+          ? JSON.parse(existingMerchant.configuration) 
+          : existingMerchant.configuration;
+      }
+    } catch (e) {}
+    
+    // Update configuration with new values
+    const updateConfig = {
+      ...currentConfig,
+      foundedYear: req.body.foundedYear || currentConfig.foundedYear,
+      employees: req.body.employees || currentConfig.employees,
+      socialMedia: req.body.socialMedia || currentConfig.socialMedia,
+      businessHours: req.body.businessHours || currentConfig.businessHours,
+      achievements: req.body.achievements || currentConfig.achievements,
+      certifications: req.body.certifications || currentConfig.certifications,
+      managerName: req.body.managerName || currentConfig.managerName,
+      managerPhone: req.body.managerPhone || currentConfig.managerPhone,
+      managerEmail: req.body.managerEmail || currentConfig.managerEmail,
+    };
+    
     const merchant = await prisma.merchant.update({
       where: { id: req.params.id },
-      data: { businessName: req.body.businessName, description: req.body.description, address: req.body.address, city: req.body.city, businessPhone: req.body.businessPhone, businessEmail: req.body.businessEmail, logo: req.body.logo, coverImage: req.body.coverImage, configuration: req.body.configuration, modules: req.body.modules, deliveryConfig: req.body.deliveryConfig }
+      data: { 
+        businessName: req.body.businessName,
+        description: req.body.description,
+        address: req.body.address,
+        city: req.body.city,
+        businessPhone: req.body.businessPhone,
+        businessEmail: req.body.businessEmail,
+        logo: req.body.logo,
+        coverImage: req.body.coverImage,
+        configuration: JSON.stringify(updateConfig),
+        modules: req.body.modules ? (typeof req.body.modules === 'string' ? req.body.modules : JSON.stringify(req.body.modules)) : existingMerchant.modules,
+        deliveryConfig: req.body.deliveryConfig ? (typeof req.body.deliveryConfig === 'string' ? req.body.deliveryConfig : JSON.stringify(req.body.deliveryConfig)) : existingMerchant.deliveryConfig
+      }
     });
+    
     res.json(merchant);
   } catch (error) {
     console.error('Error updating merchant:', error);
@@ -1209,17 +1433,79 @@ app.put('/api/merchants/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// Update merchant (PATCH)
+// Update merchant (PATCH) - UPDATED to handle businessHours and company details
 app.patch('/api/merchants/:id', authenticateAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, approvedAt, rejectionReason, businessName, description, address, city, businessPhone, businessEmail } = req.body;
+    const { 
+      status, approvedAt, rejectionReason, 
+      businessName, description, address, city, 
+      businessPhone, businessEmail,
+      foundedYear, employees, website, socialMedia,
+      businessHours, achievements, certifications,
+      managerName, managerPhone, managerEmail,
+      logo, coverImage,
+      configuration, modules, deliveryConfig
+    } = req.body;
+    
     const existingMerchant = await prisma.merchant.findUnique({ where: { id } });
     if (!existingMerchant) return res.status(404).json({ error: 'Merchant not found' });
+    
+    // Prepare update data
+    const updateData = {};
+    
+    // Basic fields
+    if (status) updateData.status = status;
+    if (approvedAt) updateData.approvedAt = new Date(approvedAt);
+    if (rejectionReason) updateData.rejectionReason = rejectionReason;
+    if (businessName) updateData.businessName = businessName;
+    if (description) updateData.description = description;
+    if (address) updateData.address = address;
+    if (city) updateData.city = city;
+    if (businessPhone) updateData.businessPhone = businessPhone;
+    if (businessEmail) updateData.businessEmail = businessEmail;
+    if (logo) updateData.logo = logo;
+    if (coverImage) updateData.coverImage = coverImage;
+    
+    // Handle configuration JSON (stores businessHours, foundedYear, employees, socialMedia, achievements, certifications, etc.)
+    let currentConfig = {};
+    try {
+      if (existingMerchant.configuration) {
+        currentConfig = typeof existingMerchant.configuration === 'string' 
+          ? JSON.parse(existingMerchant.configuration) 
+          : existingMerchant.configuration;
+      }
+    } catch (e) {}
+    
+    // Update configuration with new values
+    if (foundedYear !== undefined) currentConfig.foundedYear = foundedYear;
+    if (employees !== undefined) currentConfig.employees = employees;
+    if (website !== undefined) currentConfig.website = website;
+    if (socialMedia !== undefined) currentConfig.socialMedia = socialMedia;
+    if (businessHours !== undefined) currentConfig.businessHours = businessHours;
+    if (achievements !== undefined) currentConfig.achievements = achievements;
+    if (certifications !== undefined) currentConfig.certifications = certifications;
+    if (managerName !== undefined) currentConfig.managerName = managerName;
+    if (managerPhone !== undefined) currentConfig.managerPhone = managerPhone;
+    if (managerEmail !== undefined) currentConfig.managerEmail = managerEmail;
+    
+    updateData.configuration = JSON.stringify(currentConfig);
+    
+    // Handle modules JSON
+    if (modules !== undefined) {
+      updateData.modules = typeof modules === 'string' ? modules : JSON.stringify(modules);
+    }
+    
+    // Handle deliveryConfig JSON
+    if (deliveryConfig !== undefined) {
+      updateData.deliveryConfig = typeof deliveryConfig === 'string' ? deliveryConfig : JSON.stringify(deliveryConfig);
+    }
+    
     const merchant = await prisma.merchant.update({
       where: { id },
-      data: { ...(status && { status }), ...(approvedAt && { approvedAt: new Date(approvedAt) }), ...(rejectionReason && { rejectionReason }), ...(businessName && { businessName }), ...(description && { description }), ...(address && { address }), ...(city && { city }), ...(businessPhone && { businessPhone }), ...(businessEmail && { businessEmail }) }
+      data: updateData
     });
+    
     console.log(`✅ Merchant ${id} updated successfully`);
     res.json(merchant);
   } catch (error) {
@@ -1236,7 +1522,11 @@ app.post('/api/merchants/:id/approve', authenticateAdmin, async (req, res) => {
       where: { id },
       data: { status: 'ACTIVE', approvedAt: new Date(), approvedBy: req.body.adminId }
     });
-    io.to(`merchant_${merchant.id}`).emit('notification', { type: 'approval', title: '✅ Merchant Approved!', message: 'Your merchant account has been approved. You can now start selling!' });
+    io.to(`merchant_${merchant.id}`).emit('notification', { 
+      type: 'approval', 
+      title: '✅ Merchant Approved!', 
+      message: 'Your merchant account has been approved. You can now start selling!' 
+    });
     console.log(`✅ Merchant ${id} approved successfully`);
     res.json(merchant);
   } catch (error) {
@@ -1250,8 +1540,15 @@ app.post('/api/merchants/:id/reject', authenticateAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const { reason } = req.body;
-    const merchant = await prisma.merchant.update({ where: { id }, data: { status: 'REJECTED', rejectionReason: reason } });
-    io.to(`merchant_${merchant.id}`).emit('notification', { type: 'approval', title: '❌ Application Rejected', message: `Your application was rejected: ${reason}` });
+    const merchant = await prisma.merchant.update({ 
+      where: { id }, 
+      data: { status: 'REJECTED', rejectionReason: reason } 
+    });
+    io.to(`merchant_${merchant.id}`).emit('notification', { 
+      type: 'approval', 
+      title: '❌ Application Rejected', 
+      message: `Your application was rejected: ${reason}` 
+    });
     console.log(`✅ Merchant ${id} rejected`);
     res.json(merchant);
   } catch (error) {
@@ -1263,9 +1560,83 @@ app.post('/api/merchants/:id/reject', authenticateAdmin, async (req, res) => {
 // Get merchant categories
 app.get('/api/merchants/:merchantId/categories', async (req, res) => {
   try {
-    const categories = await prisma.productCategory.findMany({ where: { merchantId: req.params.merchantId }, include: { products: true } });
+    const categories = await prisma.productCategory.findMany({ 
+      where: { merchantId: req.params.merchantId }, 
+      include: { products: true } 
+    });
     res.json(categories);
-  } catch (error) { res.status(500).json({ error: error.message }); }
+  } catch (error) { 
+    res.status(500).json({ error: error.message }); 
+  }
+});
+
+// Update merchant profile (for merchant users)
+app.patch('/api/merchants/:id/profile', authenticateMerchant, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { 
+      businessName, description, address, city, 
+      businessPhone, businessEmail, logo, coverImage,
+      foundedYear, employees, website, socialMedia,
+      businessHours, managerName, managerPhone, managerEmail
+    } = req.body;
+    
+    // Verify ownership
+    const merchant = await prisma.merchant.findFirst({
+      where: { id, ownerId: req.user.userId }
+    });
+    
+    if (!merchant && req.user.role !== 'ADMIN' && req.user.role !== 'SUPER_ADMIN') {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    
+    // Parse existing configuration
+    let currentConfig = {};
+    try {
+      if (merchant?.configuration) {
+        currentConfig = typeof merchant.configuration === 'string' 
+          ? JSON.parse(merchant.configuration) 
+          : merchant.configuration;
+      }
+    } catch (e) {}
+    
+    // Update configuration
+    const updateConfig = {
+      ...currentConfig,
+      foundedYear: foundedYear !== undefined ? foundedYear : currentConfig.foundedYear,
+      employees: employees !== undefined ? employees : currentConfig.employees,
+      website: website !== undefined ? website : currentConfig.website,
+      socialMedia: socialMedia !== undefined ? socialMedia : currentConfig.socialMedia,
+      businessHours: businessHours !== undefined ? businessHours : currentConfig.businessHours,
+      managerName: managerName !== undefined ? managerName : currentConfig.managerName,
+      managerPhone: managerPhone !== undefined ? managerPhone : currentConfig.managerPhone,
+      managerEmail: managerEmail !== undefined ? managerEmail : currentConfig.managerEmail,
+    };
+    
+    const updateData = {
+      configuration: JSON.stringify(updateConfig)
+    };
+    
+    if (businessName !== undefined) updateData.businessName = businessName;
+    if (description !== undefined) updateData.description = description;
+    if (address !== undefined) updateData.address = address;
+    if (city !== undefined) updateData.city = city;
+    if (businessPhone !== undefined) updateData.businessPhone = businessPhone;
+    if (businessEmail !== undefined) updateData.businessEmail = businessEmail;
+    if (logo !== undefined) updateData.logo = logo;
+    if (coverImage !== undefined) updateData.coverImage = coverImage;
+    
+    const updatedMerchant = await prisma.merchant.update({
+      where: { id },
+      data: updateData
+    });
+    
+    console.log(`✅ Merchant ${id} profile updated successfully`);
+    res.json(updatedMerchant);
+  } catch (error) {
+    console.error('❌ Error updating merchant profile:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // ============================================
