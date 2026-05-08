@@ -45,7 +45,61 @@ async function seedAdmin() {
   }
 }
 
+// Seed test merchant if needed
+async function seedTestMerchant() {
+  try {
+    const existingMerchantUser = await prisma.user.findFirst({
+      where: { email: 'merchant@qine.com' }
+    });
+    
+    if (!existingMerchantUser) {
+      const hashedPassword = await bcrypt.hash('merchant123', 10);
+      const merchantUser = await prisma.user.create({
+        data: {
+          username: 'testmerchant',
+          email: 'merchant@qine.com',
+          phone: '+251911111111',
+          password: hashedPassword,
+          firstName: 'Test',
+          lastName: 'Merchant',
+          role: 'MERCHANT',
+          status: 'ACTIVE',
+        }
+      });
+      
+      // Create merchant profile
+      const merchant = await prisma.merchant.create({
+        data: {
+          ownerId: merchantUser.id,
+          businessName: 'Test Merchant Store',
+          businessType: 'RETAIL',
+          category: 'Electronics',
+          description: 'A test merchant store for demonstration',
+          address: 'Bole, Addis Ababa',
+          city: 'Addis Ababa',
+          businessPhone: '+251911111111',
+          businessEmail: 'merchant@qine.com',
+          status: 'ACTIVE',
+          rating: 4.5,
+          totalOrders: 0,
+          totalRevenue: 0,
+        }
+      });
+      
+      // Create wallet for merchant
+      await prisma.wallet.create({
+        data: { userId: merchantUser.id, balance: 0, currency: 'ETB' }
+      });
+      
+      console.log('✅ Test merchant created:', merchantUser.email, '/ merchant123');
+    }
+  } catch (error) {
+    console.log('Seed merchant note:', error.message);
+  }
+}
+
 seedAdmin();
+seedTestMerchant();
 
 const app = express();
 const PORT = process.env.PORT || 5002;
@@ -73,7 +127,6 @@ app.use(express.json({ limit: '50mb' }));
 // AUTHENTICATION MIDDLEWARE
 // ============================================
 
-// Middleware to verify JWT token
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers.authorization;
   const token = authHeader && authHeader.split(' ')[1];
@@ -91,7 +144,6 @@ const authenticateToken = (req, res, next) => {
   }
 };
 
-// Middleware to check if user is SUPER_ADMIN
 const authenticateSuperAdmin = async (req, res, next) => {
   const authHeader = req.headers.authorization;
   const token = authHeader && authHeader.split(' ')[1];
@@ -135,7 +187,6 @@ const authenticateSuperAdmin = async (req, res, next) => {
   }
 };
 
-// Middleware to check if user is Admin (SUPER_ADMIN or ADMIN)
 const authenticateAdmin = async (req, res, next) => {
   const authHeader = req.headers.authorization;
   const token = authHeader && authHeader.split(' ')[1];
@@ -165,6 +216,45 @@ const authenticateAdmin = async (req, res, next) => {
 
     if (!['SUPER_ADMIN', 'ADMIN'].includes(user.role)) {
       return res.status(403).json({ error: 'Access denied. Admin privileges required.' });
+    }
+
+    req.user = { ...decoded, ...user };
+    next();
+  } catch (error) {
+    return res.status(403).json({ error: 'Invalid or expired token.' });
+  }
+};
+
+// Middleware for merchant authentication
+const authenticateMerchant = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: 'Access denied. No token provided.' });
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+    
+    let userId;
+    if (token.startsWith('mock-token-')) {
+      userId = token.replace('mock-token-', '');
+    } else {
+      userId = decoded.userId;
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, role: true, status: true }
+    });
+
+    if (!user || user.status !== 'ACTIVE') {
+      return res.status(403).json({ error: 'Access denied.' });
+    }
+
+    if (user.role !== 'MERCHANT' && user.role !== 'SUPER_ADMIN' && user.role !== 'ADMIN') {
+      return res.status(403).json({ error: 'Access denied. Merchant privileges required.' });
     }
 
     req.user = { ...decoded, ...user };
@@ -400,7 +490,18 @@ app.post('/api/auth/login', async (req, res) => {
       }
     }).catch(err => console.log('Activity log error:', err.message));
     
-    const { password: _, ...userWithoutPassword } = user;
+    // Include merchant data for merchant users
+    let userData = { ...user };
+    if (user.role === 'MERCHANT') {
+      const merchant = await prisma.merchant.findFirst({
+        where: { ownerId: user.id }
+      });
+      if (merchant) {
+        userData.merchant = merchant;
+      }
+    }
+    
+    const { password: _, ...userWithoutPassword } = userData;
     res.json({ user: userWithoutPassword, token });
   } catch (error) {
     console.error('Login error:', error);
@@ -422,7 +523,18 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
       }
     });
     if (!user) return res.status(404).json({ error: 'User not found' });
-    res.json({ user });
+    
+    let userData = { ...user };
+    if (user.role === 'MERCHANT') {
+      const merchant = await prisma.merchant.findFirst({
+        where: { ownerId: user.id }
+      });
+      if (merchant) {
+        userData.merchant = merchant;
+      }
+    }
+    
+    res.json({ user: userData });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -893,6 +1005,181 @@ app.get('/api/merchants/:id', async (req, res) => {
   }
 });
 
+// ============================================
+// MERCHANT DASHBOARD API - NEW ENDPOINTS
+// ============================================
+
+// Get merchant dashboard data (for merchant role)
+app.get('/api/merchants/dashboard', authenticateMerchant, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    
+    // Find merchant by ownerId
+    let merchant = await prisma.merchant.findFirst({
+      where: { ownerId: userId },
+      include: {
+        products: { take: 5, orderBy: { createdAt: 'desc' }, where: { isActive: true } },
+      }
+    });
+    
+    if (!merchant) {
+      return res.status(404).json({ error: 'Merchant profile not found for this user' });
+    }
+    
+    // Get stats
+    const totalOrders = await prisma.order.count({ where: { merchantId: merchant.id } });
+    const totalRevenue = await prisma.order.aggregate({
+      where: { merchantId: merchant.id, status: 'DELIVERED' },
+      _sum: { total: true }
+    });
+    const pendingOrders = await prisma.order.count({
+      where: { merchantId: merchant.id, status: { in: ['PENDING', 'CONFIRMED', 'PREPARING'] } }
+    });
+    const totalProducts = await prisma.product.count({ where: { merchantId: merchant.id, isActive: true } });
+    
+    // Get rating
+    const reviews = await prisma.review.findMany({
+      where: { merchantId: merchant.id },
+      select: { rating: true }
+    });
+    const avgRating = reviews.length > 0 
+      ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length 
+      : 0;
+    
+    // Get recent orders
+    const recentOrders = await prisma.order.findMany({
+      where: { merchantId: merchant.id },
+      take: 10,
+      orderBy: { createdAt: 'desc' },
+      include: { 
+        customer: { select: { firstName: true, lastName: true, phone: true } },
+        orderItems: { take: 3 }
+      }
+    });
+    
+    // Get low stock items
+    const lowStockItems = await prisma.product.findMany({
+      where: { merchantId: merchant.id, stock: { lte: 5 }, isActive: true },
+      select: { id: true, name: true, sku: true, stock: true, price: true }
+    });
+    
+    res.json({
+      merchant,
+      stats: {
+        totalRevenue: totalRevenue._sum.total || 0,
+        totalOrders,
+        activeOrders: pendingOrders,
+        totalProducts,
+        avgRating: Math.round(avgRating * 10) / 10,
+        lowStockCount: lowStockItems.length
+      },
+      recentOrders,
+      lowStockItems
+    });
+  } catch (error) {
+    console.error('Error fetching merchant dashboard:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get merchant stats (for merchant dashboard)
+app.get('/api/merchants/:id/stats', async (req, res) => {
+  try {
+    const merchantId = req.params.id;
+    
+    const [totalOrders, totalRevenue, activeOrders, totalProducts, merchant] = await Promise.all([
+      prisma.order.count({ where: { merchantId } }),
+      prisma.order.aggregate({ where: { merchantId, status: 'DELIVERED' }, _sum: { total: true } }),
+      prisma.order.count({ where: { merchantId, status: { in: ['PENDING', 'CONFIRMED', 'PREPARING'] } } }),
+      prisma.product.count({ where: { merchantId, isActive: true } }),
+      prisma.merchant.findUnique({ where: { id: merchantId }, select: { rating: true } })
+    ]);
+    
+    const lowStockItems = await prisma.product.findMany({
+      where: { merchantId, stock: { lte: 5 }, isActive: true },
+      select: { id: true, name: true, sku: true, stock: true, price: true }
+    });
+    
+    const recentOrders = await prisma.order.findMany({
+      where: { merchantId },
+      take: 5,
+      orderBy: { createdAt: 'desc' },
+      include: { 
+        customer: { select: { firstName: true, lastName: true, phone: true } },
+        orderItems: { take: 2 }
+      }
+    });
+    
+    res.json({
+      totalRevenue: totalRevenue._sum.total || 0,
+      totalOrders,
+      activeOrders,
+      totalProducts,
+      avgRating: merchant?.rating || 0,
+      lowStockItems,
+      recentOrders
+    });
+  } catch (error) {
+    console.error('Error fetching merchant stats:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get merchant sales report
+app.get('/api/merchants/:merchantId/sales-report', authenticateMerchant, async (req, res) => {
+  try {
+    const { merchantId } = req.params;
+    const { startDate, endDate } = req.query;
+    
+    // Verify merchant ownership
+    const merchant = await prisma.merchant.findFirst({
+      where: { 
+        id: merchantId,
+        ownerId: req.user.userId
+      }
+    });
+    
+    if (!merchant && req.user.role !== 'ADMIN' && req.user.role !== 'SUPER_ADMIN') {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    
+    const where = { merchantId };
+    if (startDate) where.createdAt = { gte: new Date(startDate) };
+    if (endDate) where.createdAt = { ...where.createdAt, lte: new Date(endDate) };
+    
+    const orders = await prisma.order.findMany({
+      where,
+      include: { 
+        orderItems: true, 
+        customer: { select: { firstName: true, lastName: true } } 
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+    
+    const totalRevenue = orders.filter(o => o.status === 'DELIVERED').reduce((sum, o) => sum + o.total, 0);
+    const totalOrders = orders.length;
+    const averageOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+    
+    // Daily breakdown
+    const dailyData = {};
+    orders.forEach(order => {
+      const date = order.createdAt.toISOString().split('T')[0];
+      if (!dailyData[date]) dailyData[date] = { revenue: 0, orders: 0 };
+      if (order.status === 'DELIVERED') dailyData[date].revenue += order.total;
+      dailyData[date].orders += 1;
+    });
+    
+    res.json({
+      summary: { totalRevenue, totalOrders, averageOrderValue },
+      daily: Object.entries(dailyData).map(([date, data]) => ({ date, ...data })),
+      orders
+    });
+  } catch (error) {
+    console.error('Error fetching merchant sales report:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Create merchant
 app.post('/api/merchants', authenticateToken, async (req, res) => {
   try {
@@ -969,29 +1256,6 @@ app.post('/api/merchants/:id/reject', authenticateAdmin, async (req, res) => {
     res.json(merchant);
   } catch (error) {
     console.error('❌ Error rejecting merchant:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Get merchant stats
-app.get('/api/merchants/:id/stats', async (req, res) => {
-  try {
-    const merchantId = req.params.id;
-    const [totalOrders, totalRevenue, activeOrders, totalProducts, rating] = await Promise.all([
-      prisma.order.count({ where: { merchantId } }),
-      prisma.order.aggregate({ where: { merchantId }, _sum: { total: true } }),
-      prisma.order.count({ where: { merchantId, status: { in: ['PENDING', 'CONFIRMED', 'PREPARING'] } } }),
-      prisma.product.count({ where: { merchantId, isActive: true } }),
-      prisma.merchant.findUnique({ where: { id: merchantId }, select: { rating: true } })
-    ]);
-    const lowStockItems = await prisma.product.findMany({ where: { merchantId, stock: { lte: 5 } }, select: { name: true, stock: true } });
-    const recentOrders = await prisma.order.findMany({
-      where: { merchantId }, take: 5, orderBy: { createdAt: 'desc' },
-      include: { customer: { select: { firstName: true, lastName: true, phone: true } } }
-    });
-    res.json({ totalRevenue: totalRevenue._sum.total || 0, activeOrders, totalProducts, avgRating: rating?.rating || 0, lowStockItems, recentOrders, totalOrders });
-  } catch (error) {
-    console.error('Error fetching merchant stats:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -2310,6 +2574,7 @@ app.post('/api/cache/clear', authenticateAdmin, async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
 // Admin reset user password
 app.post('/api/users/:id/reset-password', authenticateAdmin, async (req, res) => {
   try {
@@ -2346,40 +2611,6 @@ app.post('/api/users/:id/reset-password', authenticateAdmin, async (req, res) =>
     }).catch(err => console.log('Activity log error:', err.message));
     
     console.log(`✅ Password reset for user ${id}`);
-    res.json({ success: true, message: 'Password reset successfully' });
-  } catch (error) {
-    console.error('❌ Error resetting password:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// ============================================
-// ADMIN RESET USER PASSWORD
-// ============================================
-
-app.post('/api/users/:id/reset-password', authenticateAdmin, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { newPassword } = req.body;
-    
-    if (!newPassword || newPassword.length < 6) {
-      return res.status(400).json({ error: 'New password must be at least 6 characters' });
-    }
-    
-    const user = await prisma.user.findUnique({ where: { id } });
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    
-    if (user.role === 'SUPER_ADMIN') {
-      return res.status(403).json({ error: 'Cannot reset Super Admin password via this endpoint' });
-    }
-    
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-    await prisma.user.update({
-      where: { id },
-      data: { password: hashedPassword },
-    });
-    
-    console.log(`✅ Password reset for user ${id} by admin`);
     res.json({ success: true, message: 'Password reset successfully' });
   } catch (error) {
     console.error('❌ Error resetting password:', error);
@@ -2471,40 +2702,19 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log('   GET    /api/merchants');
   console.log('   POST   /api/merchants');
   console.log('   GET    /api/merchants/:id');
-  console.log('   PUT    /api/merchants/:id');
-  console.log('   PATCH  /api/merchants/:id');
-  console.log('   POST   /api/merchants/:id/approve');
-  console.log('   POST   /api/merchants/:id/reject');
-  console.log('   GET    /api/merchants/pending');
+  console.log('   GET    /api/merchants/dashboard ⭐ NEW for merchants');
   console.log('   GET    /api/merchants/:id/stats');
+  console.log('   GET    /api/merchants/:merchantId/sales-report');
+  console.log('   GET    /api/merchants/:merchantId/orders');
   console.log('   GET    /api/merchants/:merchantId/products');
-  console.log('   GET    /api/merchants/:merchantId/categories');
+  console.log('   PATCH  /api/merchants/:id/approve');
+  console.log('   PATCH  /api/merchants/:id/reject');
   console.log('   POST   /api/products');
-  console.log('   PUT    /api/products/:id');
-  console.log('   DELETE /api/products/:id');
-  console.log('   PATCH  /api/products/:id/stock');
-  console.log('   POST   /api/categories');
   console.log('   GET    /api/orders');
   console.log('   POST   /api/orders');
-  console.log('   GET    /api/orders/:id');
-  console.log('   GET    /api/merchants/:merchantId/orders');
-  console.log('   PATCH  /api/orders/:id/status');
-  console.log('   GET    /api/riders');
-  console.log('   GET    /api/riders/:id');
-  console.log('   POST   /api/riders');
-  console.log('   PATCH  /api/riders/:id/location');
-  console.log('   PATCH  /api/riders/:id/status');
-  console.log('   GET    /api/users/:userId/wallet');
-  console.log('   GET    /api/admin/stats');
   console.log('   GET    /api/admin/dashboard');
-  console.log('   GET    /api/reports/sales');
-  console.log('   GET    /api/settings');
-  console.log('   POST   /api/settings');
   console.log('   GET    /api/health');
-  console.log('   POST   /api/system/restart (Super Admin)');
-  console.log('   POST   /api/system/stop (Super Admin)');
-  console.log('   DELETE /api/system/logs (Super Admin)');
-  console.log('\n✨ All APIs are now ready!\n');
+  console.log('\n✨ All APIs are ready!\n');
 });
 
 export default app;
