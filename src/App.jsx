@@ -13,7 +13,6 @@ import ProtectedRoute from './components/ProtectedRoute';
 import ToastProvider from './components/ToastProvider';
 import ErrorBoundary from './components/ErrorBoundary';
 import useKeyboardShortcuts from './hooks/useKeyboardShortcuts';
-import LiveMap from './pages/LiveMap';
 
 // Pages
 import Login from './pages/Login';
@@ -39,6 +38,8 @@ import PendingApprovals from "./pages/Admin/PendingApprovals";
 import CommissionManagement from "./pages/Admin/CommissionManagement";
 import AuditLogs from './pages/AuditLogs';
 import Promotions from './pages/Promotions';
+import LiveMap from './pages/LiveMap';
+import Reports from './pages/Reports';
 
 // Wrapper component to handle auth loading
 const AppContent = () => {
@@ -85,7 +86,7 @@ const AppContent = () => {
           </div>
         } />
 
-        {/* Protected Routes */}
+        {/* Protected Routes - ALL INSIDE THIS */}
         <Route path="/" element={
           <ProtectedRoute>
             <Layout />
@@ -120,61 +121,58 @@ const AppContent = () => {
 
           {/* Users */}
           <Route path="users" element={
-            <ProtectedRoute roles={['ADMIN', 'SUPER_ADMIN']}>
-              <Users />
-            </ProtectedRoute>
+            <ProtectedRoute roles={['ADMIN', 'SUPER_ADMIN']}><Users /></ProtectedRoute>
           } />
 
           {/* Riders */}
           <Route path="riders" element={
-            <ProtectedRoute roles={['ADMIN', 'SUPER_ADMIN']}>
-              <Riders riders={riders} setRiders={setRiders} />
-            </ProtectedRoute>
+            <ProtectedRoute roles={['ADMIN', 'SUPER_ADMIN']}><Riders riders={riders} setRiders={setRiders} /></ProtectedRoute>
           } />
           <Route path="riders/:id" element={
-            <ProtectedRoute roles={['ADMIN', 'SUPER_ADMIN']}>
-              <RiderDetails riders={riders} setRiders={setRiders} />
-            </ProtectedRoute>
+            <ProtectedRoute roles={['ADMIN', 'SUPER_ADMIN']}><RiderDetails riders={riders} setRiders={setRiders} /></ProtectedRoute>
           } />
 
           {/* Merchants */}
           <Route path="merchants" element={
-            <ProtectedRoute roles={['ADMIN', 'SUPER_ADMIN']}>
-              <Merchants />
-            </ProtectedRoute>
+            <ProtectedRoute roles={['ADMIN', 'SUPER_ADMIN']}><Merchants /></ProtectedRoute>
           } />
           <Route path="merchants/add" element={
-            <ProtectedRoute roles={['ADMIN', 'SUPER_ADMIN']}>
-              <AddMerchant />
-            </ProtectedRoute>
+            <ProtectedRoute roles={['ADMIN', 'SUPER_ADMIN']}><AddMerchant /></ProtectedRoute>
           } />
 
           {/* Orders */}
           <Route path="orders" element={
-            <ProtectedRoute roles={['ADMIN', 'SUPER_ADMIN']}>
-              <Orders riders={riders} />
-            </ProtectedRoute>
+            <ProtectedRoute roles={['ADMIN', 'SUPER_ADMIN']}><Orders riders={riders} /></ProtectedRoute>
           } />
 
-          {/* Promotions - AT TOP LEVEL, NOT inside merchant portal */}
+          {/* Promotions */}
           <Route path="promotions" element={
-            <ProtectedRoute roles={['ADMIN', 'SUPER_ADMIN']}>
-              <Promotions />
-            </ProtectedRoute>
+            <ProtectedRoute roles={['ADMIN', 'SUPER_ADMIN']}><Promotions /></ProtectedRoute>
           } />
 
-          {/* Audit Logs - AT TOP LEVEL */}
+          {/* Audit Logs */}
           <Route path="audit-logs" element={
-            <ProtectedRoute roles={['ADMIN', 'SUPER_ADMIN']}>
-              <AuditLogs />
-            </ProtectedRoute>
+            <ProtectedRoute roles={['ADMIN', 'SUPER_ADMIN']}><AuditLogs /></ProtectedRoute>
+          } />
+
+          {/* Live Map */}
+          <Route path="live-map" element={
+            <ProtectedRoute roles={['ADMIN', 'SUPER_ADMIN']}><LiveMap /></ProtectedRoute>
+          } />
+
+          {/* Reports - NEW */}
+          <Route path="reports" element={
+            <ProtectedRoute roles={['ADMIN', 'SUPER_ADMIN']}><Reports /></ProtectedRoute>
+          } />
+
+          {/* Payments */}
+          <Route path="payments" element={
+            <ProtectedRoute roles={['ADMIN', 'SUPER_ADMIN']}><Payments /></ProtectedRoute>
           } />
 
           {/* Merchant Portal */}
           <Route path="merchant/:merchantId" element={
-            <ProtectedRoute roles={['MERCHANT', 'ADMIN', 'SUPER_ADMIN']}>
-              <MerchantPage />
-            </ProtectedRoute>
+            <ProtectedRoute roles={['MERCHANT', 'ADMIN', 'SUPER_ADMIN']}><MerchantPage /></ProtectedRoute>
           }>
             <Route index element={<MerchantDashboard />} />
             <Route path="products" element={<ProductManagement />} />
@@ -185,13 +183,6 @@ const AppContent = () => {
             <Route path="staff" element={<div className="p-6">Staff Management Coming Soon</div>} />
           </Route>
 
-          {/* Payments */}
-          <Route path="payments" element={
-            <ProtectedRoute roles={['ADMIN', 'SUPER_ADMIN']}>
-              <Payments />
-            </ProtectedRoute>
-          } />
-
           {/* Settings & Profile */}
           <Route path="settings" element={<SettingsPage />} />
           <Route path="profile" element={<Profile />} />
@@ -200,7 +191,6 @@ const AppContent = () => {
           {/* Redirects */}
           <Route path="settings/profile" element={<Navigate to="/profile" replace />} />
           <Route path="settings/security" element={<Navigate to="/security" replace />} />
-          <Route path="reports" element={<Navigate to="/admin/analytics" replace />} />
           <Route path="assign-rider" element={<Navigate to="/riders" replace />} />
 
           {/* Catch-all */}
@@ -211,18 +201,11 @@ const AppContent = () => {
         <Route path="*" element={
           user ? <Navigate to="/" replace /> : <Navigate to="/login" replace />
         } />
-		{/* map */}
-		<Route path="live-map" element={
-  <ProtectedRoute roles={['ADMIN', 'SUPER_ADMIN']}>
-    <LiveMap />
-  </ProtectedRoute>
-} />
       </Routes>
     </ErrorBoundary>
   );
 };
 
-// Main App Component
 function App() {
   return (
     <ThemeProvider>

@@ -1,19 +1,8 @@
-// src/components/Layout/Sidebar.jsx
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
-  LayoutDashboard,
-  Users,
-  Store,
-  Bike,
-  ShoppingBag,
-  CreditCard,
-  Settings,
-  BarChart3,
-  ClipboardCheck,
-  FileText,
-  User,
-  Megaphone,
-  MapPin,
+  LayoutDashboard, Users, Store, Bike, ShoppingBag,
+  CreditCard, Settings, BarChart3, ClipboardCheck,
+  FileText, User, Megaphone, MapPin,
 } from "lucide-react";
 import { useContext } from "react";
 import { ThemeContext } from "../../context/ThemeContext.jsx";
@@ -31,11 +20,12 @@ const Sidebar = () => {
     { path: "/riders", icon: Bike, key: "Riders" },
     { path: "/orders", icon: ShoppingBag, key: "Orders" },
     { path: "/payments", icon: CreditCard, key: "Payments" },
+    { path: "/reports", icon: BarChart3, key: "Reports" },
     { path: "/audit-logs", icon: FileText, key: "Audit Logs" },
     { path: "/live-map", icon: MapPin, key: "Live Map" },
   ];
 
-  const promotionsMenuItems = [
+   const promotionsMenuItems = [
     { path: "/promotions", icon: Megaphone, key: "Promotions" },
   ];
 

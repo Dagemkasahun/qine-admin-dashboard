@@ -7,6 +7,8 @@ import { PrismaClient } from '@prisma/client';
 import { Server } from 'socket.io';
 import http from 'http';
 import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import { OAuth2Client } from 'google-auth-library';
 
 const prisma = new PrismaClient();
 
@@ -21,10 +23,9 @@ async function seedAdmin() {
     
     if (existingAdmin) {
       console.log('✅ Admin already exists:', existingAdmin.email);
-      return; // Don't delete/recreate if admin exists
+      return;
     }
     
-    // Only create if no admin exists
     const hashedPassword = await bcrypt.hash('admin123', 10);
     const admin = await prisma.user.create({
       data: {
@@ -67,6 +68,111 @@ app.use(cors({
 }));
 
 app.use(express.json({ limit: '50mb' }));
+
+// ============================================
+// AUTHENTICATION MIDDLEWARE
+// ============================================
+
+// Middleware to verify JWT token
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: 'Access denied. No token provided.' });
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+    req.user = decoded;
+    next();
+  } catch (error) {
+    return res.status(403).json({ error: 'Invalid or expired token.' });
+  }
+};
+
+// Middleware to check if user is SUPER_ADMIN
+const authenticateSuperAdmin = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: 'Access denied. No token provided.' });
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+    
+    let userId;
+    if (token.startsWith('mock-token-')) {
+      userId = token.replace('mock-token-', '');
+    } else {
+      userId = decoded.userId;
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, role: true, status: true }
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+
+    if (user.status !== 'ACTIVE') {
+      return res.status(403).json({ error: 'Account is not active.' });
+    }
+
+    if (user.role !== 'SUPER_ADMIN') {
+      return res.status(403).json({ error: 'Access denied. Super Admin privileges required.' });
+    }
+
+    req.user = { ...decoded, ...user };
+    next();
+  } catch (error) {
+    console.error('Auth middleware error:', error);
+    return res.status(403).json({ error: 'Invalid or expired token.' });
+  }
+};
+
+// Middleware to check if user is Admin (SUPER_ADMIN or ADMIN)
+const authenticateAdmin = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return res.status(401).json({ error: 'Access denied. No token provided.' });
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+    
+    let userId;
+    if (token.startsWith('mock-token-')) {
+      userId = token.replace('mock-token-', '');
+    } else {
+      userId = decoded.userId;
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, role: true, status: true }
+    });
+
+    if (!user || user.status !== 'ACTIVE') {
+      return res.status(403).json({ error: 'Access denied.' });
+    }
+
+    if (!['SUPER_ADMIN', 'ADMIN'].includes(user.role)) {
+      return res.status(403).json({ error: 'Access denied. Admin privileges required.' });
+    }
+
+    req.user = { ...decoded, ...user };
+    next();
+  } catch (error) {
+    return res.status(403).json({ error: 'Invalid or expired token.' });
+  }
+};
 
 // Create HTTP server
 const server = http.createServer(app);
@@ -116,8 +222,28 @@ io.on('connection', (socket) => {
   });
 });
 
+// ============================================
+// REQUEST QUEUE - Prevent overload
+// ============================================
+const requestQueue = new Map();
+const QUEUE_DELAY = 100;
 
-
+app.use((req, res, next) => {
+  const key = `${req.method}:${req.path}`;
+  const now = Date.now();
+  const lastRequest = requestQueue.get(key);
+  
+  if (lastRequest && (now - lastRequest) < QUEUE_DELAY) {
+    const delay = QUEUE_DELAY - (now - lastRequest);
+    setTimeout(() => {
+      requestQueue.set(key, Date.now());
+      next();
+    }, delay);
+  } else {
+    requestQueue.set(key, now);
+    next();
+  }
+});
 
 // ============================================
 // AUTHENTICATION API
@@ -128,11 +254,15 @@ app.post('/api/auth/google', async (req, res) => {
   try {
     const { googleToken, email, firstName, lastName, profileImage } = req.body;
     
-    const { OAuth2Client } = require('google-auth-library');
     const client = new OAuth2Client('880024548995-31d3o35fg4f5036ke1jvkdlhi4v3qkkn.apps.googleusercontent.com');
+    
     const ticket = await client.verifyIdToken({
       idToken: googleToken,
-      audience: '880024548995-5dimsmpj256no6c40du0gpckpqaliu7c.apps.googleusercontent.com',
+      audience: [
+        '880024548995-5dimsmpj256no6c40du0gpckpqaliu7c.apps.googleusercontent.com',
+        '880024548995-31d3o35fg4f5036ke1jvkdlhi4v3qkkn.apps.googleusercontent.com',
+        '880024548995-l2fqgdnsdt8v87fl53qia21dgp13jkkm.apps.googleusercontent.com',
+      ],
     });
     
     const payload = ticket.getPayload();
@@ -158,7 +288,6 @@ app.post('/api/auth/google', async (req, res) => {
       });
     }
     
-    const jwt = require('jsonwebtoken');
     const token = jwt.sign(
       { userId: user.id, role: user.role },
       process.env.JWT_SECRET || 'your-secret-key',
@@ -169,29 +298,6 @@ app.post('/api/auth/google', async (req, res) => {
   } catch (error) {
     console.error('Google auth error:', error);
     res.status(500).json({ error: 'Google authentication failed' });
-  }
-});
-
-// ============================================
-// REQUEST QUEUE - Prevent overload
-// ============================================
-const requestQueue = new Map();
-const QUEUE_DELAY = 100;
-
-app.use((req, res, next) => {
-  const key = `${req.method}:${req.path}`;
-  const now = Date.now();
-  const lastRequest = requestQueue.get(key);
-  
-  if (lastRequest && (now - lastRequest) < QUEUE_DELAY) {
-    const delay = QUEUE_DELAY - (now - lastRequest);
-    setTimeout(() => {
-      requestQueue.set(key, Date.now());
-      next();
-    }, delay);
-  } else {
-    requestQueue.set(key, now);
-    next();
   }
 });
 
@@ -261,14 +367,41 @@ app.post('/api/auth/login', async (req, res) => {
     if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
+
+    if (user.status !== 'ACTIVE') {
+      return res.status(403).json({ error: 'Account is not active. Please contact support.' });
+    }
     
     const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
     
+    const token = jwt.sign(
+      { userId: user.id, role: user.role, email: user.email },
+      process.env.JWT_SECRET || 'your-secret-key',
+      { expiresIn: '30d' }
+    );
+    
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { lastLogin: new Date() }
+    });
+
+    await prisma.activityLog.create({
+      data: {
+        userId: user.id,
+        action: 'LOGIN',
+        entity: 'USER',
+        entityId: user.id,
+        details: `User logged in`,
+        ipAddress: req.ip,
+        status: 'SUCCESS'
+      }
+    }).catch(err => console.log('Activity log error:', err.message));
+    
     const { password: _, ...userWithoutPassword } = user;
-    res.json({ user: userWithoutPassword, token: `mock-token-${user.id}` });
+    res.json({ user: userWithoutPassword, token });
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ error: error.message });
@@ -276,14 +409,57 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 // Get current user
-app.get('/api/auth/me', async (req, res) => {
+app.get('/api/auth/me', authenticateToken, async (req, res) => {
   try {
-    const token = req.headers.authorization?.split(' ')[1];
-    if (!token) {
-      return res.status(401).json({ error: 'No token provided' });
-    }
-    res.json({ user: { id: '1', email: 'test@test.com', firstName: 'Test', lastName: 'User' } });
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.userId },
+      select: {
+        id: true, username: true, email: true, phone: true,
+        firstName: true, lastName: true, profileImage: true,
+        role: true, status: true, emailVerified: true,
+        phoneVerified: true, lastLogin: true, createdAt: true,
+        updatedAt: true,
+      }
+    });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    res.json({ user });
   } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Change password
+app.post('/api/auth/change-password', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { currentPassword, newPassword } = req.body;
+    
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Current and new password are required' });
+    }
+    
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters' });
+    }
+    
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    
+    const validPassword = await bcrypt.compare(currentPassword, user.password);
+    if (!validPassword) {
+      return res.status(401).json({ error: 'Current password is incorrect' });
+    }
+    
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await prisma.user.update({
+      where: { id: userId },
+      data: { password: hashedPassword },
+    });
+    
+    console.log(`✅ Password changed for user ${userId}`);
+    res.json({ success: true, message: 'Password changed successfully' });
+  } catch (error) {
+    console.error('❌ Error changing password:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -293,7 +469,7 @@ app.get('/api/auth/me', async (req, res) => {
 // ============================================
 
 // Get all users
-app.get('/api/users', async (req, res) => {
+app.get('/api/users', authenticateAdmin, async (req, res) => {
   try {
     const users = await prisma.user.findMany({
       select: {
@@ -315,7 +491,7 @@ app.get('/api/users', async (req, res) => {
 });
 
 // Get user by ID
-app.get('/api/users/:id', async (req, res) => {
+app.get('/api/users/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const user = await prisma.user.findUnique({
@@ -363,7 +539,7 @@ app.get('/api/users/:userId/stats', async (req, res) => {
 });
 
 // Create user
-app.post('/api/users', async (req, res) => {
+app.post('/api/users', authenticateAdmin, async (req, res) => {
   try {
     const { username, email, phone, password, firstName, lastName, role, status } = req.body;
     if (!username || !password || !firstName || !lastName) {
@@ -399,16 +575,13 @@ app.post('/api/users', async (req, res) => {
 });
 
 // Update user (PUT)
-app.put('/api/users/:id', async (req, res) => {
+app.put('/api/users/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { firstName, lastName, phone, profileImage, email } = req.body;
     
     const existingUser = await prisma.user.findUnique({ where: { id } });
     if (!existingUser) return res.status(404).json({ error: 'User not found' });
-    
-    // Allow updating profile info for all users including SUPER_ADMIN
-    // Only block role changes for SUPER_ADMIN (which isn't in PUT anyway)
     
     const user = await prisma.user.update({
       where: { id },
@@ -431,7 +604,7 @@ app.put('/api/users/:id', async (req, res) => {
 });
 
 // Update user (PATCH)
-app.patch('/api/users/:id', async (req, res) => {
+app.patch('/api/users/:id', authenticateAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const { status, role, firstName, lastName, email, phone, profileImage } = req.body;
@@ -439,7 +612,6 @@ app.patch('/api/users/:id', async (req, res) => {
     const existingUser = await prisma.user.findUnique({ where: { id } });
     if (!existingUser) return res.status(404).json({ error: 'User not found' });
     
-    // SUPER_ADMIN protection - only prevent role change and suspension
     if (existingUser.role === 'SUPER_ADMIN') {
       if (role && role !== 'SUPER_ADMIN') {
         return res.status(403).json({ error: 'Cannot change Super Admin role' });
@@ -447,10 +619,8 @@ app.patch('/api/users/:id', async (req, res) => {
       if (status === 'SUSPENDED') {
         return res.status(403).json({ error: 'Cannot suspend Super Admin account' });
       }
-      // But allow updating profile info (name, phone, email, image)
     }
     
-    // Check phone uniqueness if changing
     if (phone && phone !== existingUser.phone) {
       const phoneExists = await prisma.user.findFirst({ 
         where: { phone, id: { not: id } } 
@@ -460,7 +630,6 @@ app.patch('/api/users/:id', async (req, res) => {
       }
     }
     
-    // Check email uniqueness if changing
     if (email && email !== existingUser.email) {
       const emailExists = await prisma.user.findFirst({ 
         where: { email, id: { not: id } } 
@@ -470,7 +639,6 @@ app.patch('/api/users/:id', async (req, res) => {
       }
     }
     
-    // Build update data (only include fields that are provided)
     const updateData = {};
     if (firstName !== undefined) updateData.firstName = firstName;
     if (lastName !== undefined) updateData.lastName = lastName;
@@ -478,7 +646,6 @@ app.patch('/api/users/:id', async (req, res) => {
     if (phone !== undefined) updateData.phone = phone;
     if (profileImage !== undefined) updateData.profileImage = profileImage;
     
-    // Only allow role/status changes for non-SUPER_ADMIN
     if (existingUser.role !== 'SUPER_ADMIN') {
       if (status !== undefined) updateData.status = status;
       if (role !== undefined) updateData.role = role;
@@ -499,7 +666,7 @@ app.patch('/api/users/:id', async (req, res) => {
 });
 
 // Delete user
-app.delete('/api/users/:id', async (req, res) => {
+app.delete('/api/users/:id', authenticateSuperAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const user = await prisma.user.findUnique({ where: { id }, include: { merchant: true, riderProfile: true } });
@@ -542,7 +709,7 @@ app.delete('/api/users/:id', async (req, res) => {
 });
 
 // Bulk delete users
-app.post('/api/users/bulk-delete', async (req, res) => {
+app.post('/api/users/bulk-delete', authenticateSuperAdmin, async (req, res) => {
   try {
     const { ids } = req.body;
     if (!ids || !Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'No user IDs provided' });
@@ -581,7 +748,7 @@ app.post('/api/users/bulk-delete', async (req, res) => {
 });
 
 // Bulk update user status
-app.post('/api/users/bulk-status', async (req, res) => {
+app.post('/api/users/bulk-status', authenticateAdmin, async (req, res) => {
   try {
     const { ids, status } = req.body;
     if (!ids || !Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'No user IDs provided' });
@@ -598,7 +765,7 @@ app.post('/api/users/bulk-status', async (req, res) => {
 });
 
 // Get users by role
-app.get('/api/users/role/:role', async (req, res) => {
+app.get('/api/users/role/:role', authenticateAdmin, async (req, res) => {
   try {
     const { role } = req.params;
     const users = await prisma.user.findMany({
@@ -614,7 +781,7 @@ app.get('/api/users/role/:role', async (req, res) => {
 });
 
 // Get users by status
-app.get('/api/users/status/:status', async (req, res) => {
+app.get('/api/users/status/:status', authenticateAdmin, async (req, res) => {
   try {
     const { status } = req.params;
     const users = await prisma.user.findMany({
@@ -630,7 +797,7 @@ app.get('/api/users/status/:status', async (req, res) => {
 });
 
 // Search users
-app.get('/api/users/search/:query', async (req, res) => {
+app.get('/api/users/search/:query', authenticateAdmin, async (req, res) => {
   try {
     const { query } = req.params;
     const users = await prisma.user.findMany({
@@ -654,7 +821,7 @@ app.get('/api/users/search/:query', async (req, res) => {
 });
 
 // Get user activity logs
-app.get('/api/users/:userId/activity', async (req, res) => {
+app.get('/api/users/:userId/activity', authenticateAdmin, async (req, res) => {
   try {
     const { userId } = req.params;
     const { limit = 50 } = req.query;
@@ -671,38 +838,19 @@ app.get('/api/users/:userId/activity', async (req, res) => {
 // ============================================
 
 // Get all merchants
-// Get all merchants - OPTIMIZED
 app.get('/api/merchants', async (req, res) => {
   try {
     const { include = 'basic' } = req.query;
     
-    // Basic query - fast, no nested relations
     if (include === 'basic' || !include) {
       const merchants = await prisma.merchant.findMany({
         select: {
-          id: true,
-          ownerId: true,
-          businessName: true,
-          businessType: true,
-          category: true,
-          subCategory: true,
-          description: true,
-          logo: true,
-          coverImage: true,
-          businessPhone: true,
-          businessEmail: true,
-          website: true,
-          address: true,
-          city: true,
-          status: true,
-          rating: true,
-          totalReviews: true,
-          totalOrders: true,
-          totalRevenue: true,
-          licenseNumber: true,
-          tinNumber: true,
-          createdAt: true,
-          updatedAt: true,
+          id: true, ownerId: true, businessName: true, businessType: true,
+          category: true, subCategory: true, description: true, logo: true,
+          coverImage: true, businessPhone: true, businessEmail: true, website: true,
+          address: true, city: true, status: true, rating: true, totalReviews: true,
+          totalOrders: true, totalRevenue: true, licenseNumber: true, tinNumber: true,
+          createdAt: true, updatedAt: true,
         },
         orderBy: { createdAt: 'desc' }
       });
@@ -710,7 +858,6 @@ app.get('/api/merchants', async (req, res) => {
       return res.json(merchants);
     }
     
-    // Full query - with relations (only when specifically requested)
     const merchants = await prisma.merchant.findMany({
       include: { 
         owner: { select: { id: true, firstName: true, lastName: true, email: true, phone: true } }, 
@@ -747,7 +894,7 @@ app.get('/api/merchants/:id', async (req, res) => {
 });
 
 // Create merchant
-app.post('/api/merchants', async (req, res) => {
+app.post('/api/merchants', authenticateToken, async (req, res) => {
   try {
     const { ownerId, ...merchantData } = req.body;
     const merchant = await prisma.merchant.create({
@@ -762,7 +909,7 @@ app.post('/api/merchants', async (req, res) => {
 });
 
 // Update merchant (PUT)
-app.put('/api/merchants/:id', async (req, res) => {
+app.put('/api/merchants/:id', authenticateToken, async (req, res) => {
   try {
     const merchant = await prisma.merchant.update({
       where: { id: req.params.id },
@@ -776,7 +923,7 @@ app.put('/api/merchants/:id', async (req, res) => {
 });
 
 // Update merchant (PATCH)
-app.patch('/api/merchants/:id', async (req, res) => {
+app.patch('/api/merchants/:id', authenticateAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const { status, approvedAt, rejectionReason, businessName, description, address, city, businessPhone, businessEmail } = req.body;
@@ -795,7 +942,7 @@ app.patch('/api/merchants/:id', async (req, res) => {
 });
 
 // Approve merchant
-app.post('/api/merchants/:id/approve', async (req, res) => {
+app.post('/api/merchants/:id/approve', authenticateAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const merchant = await prisma.merchant.update({
@@ -812,7 +959,7 @@ app.post('/api/merchants/:id/approve', async (req, res) => {
 });
 
 // Reject merchant
-app.post('/api/merchants/:id/reject', async (req, res) => {
+app.post('/api/merchants/:id/reject', authenticateAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const { reason } = req.body;
@@ -861,7 +1008,6 @@ app.get('/api/merchants/:merchantId/categories', async (req, res) => {
 // PRODUCT API
 // ============================================
 
-// Get merchant products
 app.get('/api/merchants/:merchantId/products', async (req, res) => {
   try {
     const products = await prisma.product.findMany({ where: { merchantId: req.params.merchantId, isActive: true }, include: { category: true }, orderBy: { createdAt: 'desc' } });
@@ -872,8 +1018,7 @@ app.get('/api/merchants/:merchantId/products', async (req, res) => {
   }
 });
 
-// Create product
-app.post('/api/products', async (req, res) => {
+app.post('/api/products', authenticateToken, async (req, res) => {
   try {
     const product = await prisma.product.create({
       data: { merchantId: req.body.merchantId, name: req.body.name, description: req.body.description, price: req.body.price, stock: req.body.stock, sku: req.body.sku, images: req.body.images, categoryId: req.body.categoryId, isActive: true }
@@ -886,8 +1031,7 @@ app.post('/api/products', async (req, res) => {
   }
 });
 
-// Update product
-app.put('/api/products/:id', async (req, res) => {
+app.put('/api/products/:id', authenticateToken, async (req, res) => {
   try {
     const product = await prisma.product.update({
       where: { id: req.params.id },
@@ -900,8 +1044,7 @@ app.put('/api/products/:id', async (req, res) => {
   }
 });
 
-// Delete product
-app.delete('/api/products/:id', async (req, res) => {
+app.delete('/api/products/:id', authenticateToken, async (req, res) => {
   try {
     await prisma.product.delete({ where: { id: req.params.id } });
     res.json({ message: 'Product deleted successfully' });
@@ -911,8 +1054,7 @@ app.delete('/api/products/:id', async (req, res) => {
   }
 });
 
-// Update product stock
-app.patch('/api/products/:id/stock', async (req, res) => {
+app.patch('/api/products/:id/stock', authenticateToken, async (req, res) => {
   try {
     const { stock } = req.body;
     const product = await prisma.product.update({ where: { id: req.params.id }, data: { stock } });
@@ -926,8 +1068,7 @@ app.patch('/api/products/:id/stock', async (req, res) => {
   }
 });
 
-// Create category
-app.post('/api/categories', async (req, res) => {
+app.post('/api/categories', authenticateToken, async (req, res) => {
   try {
     const category = await prisma.productCategory.create({ data: { name: req.body.name, merchantId: req.body.merchantId, description: req.body.description } });
     res.json(category);
@@ -938,7 +1079,6 @@ app.post('/api/categories', async (req, res) => {
 // ORDER API
 // ============================================
 
-// Get all orders
 app.get('/api/orders', async (req, res) => {
   try {
     const { riderId, status } = req.query;
@@ -961,8 +1101,7 @@ app.get('/api/orders', async (req, res) => {
   }
 });
 
-// Create order
-app.post('/api/orders', async (req, res) => {
+app.post('/api/orders', authenticateToken, async (req, res) => {
   try {
     const { customerId, merchantId, items, subtotal, deliveryFee, total, deliveryAddress, paymentMethod } = req.body;
     console.log('📦 Creating order:', { customerId, merchantId, items: items?.length, total });
@@ -994,7 +1133,6 @@ app.post('/api/orders', async (req, res) => {
   }
 });
 
-// Get merchant orders
 app.get('/api/merchants/:merchantId/orders', async (req, res) => {
   try {
     const orders = await prisma.order.findMany({
@@ -1009,7 +1147,6 @@ app.get('/api/merchants/:merchantId/orders', async (req, res) => {
   }
 });
 
-// Get order by ID
 app.get('/api/orders/:id', async (req, res) => {
   try {
     const order = await prisma.order.findUnique({
@@ -1021,8 +1158,7 @@ app.get('/api/orders/:id', async (req, res) => {
   } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
-// Update order status
-app.patch('/api/orders/:id/status', async (req, res) => {
+app.patch('/api/orders/:id/status', authenticateToken, async (req, res) => {
   try {
     const { status, notes, changedBy } = req.body;
     const order = await prisma.order.update({ where: { id: req.params.id }, data: { status } });
@@ -1051,7 +1187,6 @@ app.patch('/api/orders/:id/status', async (req, res) => {
 // RIDER API
 // ============================================
 
-// Get all riders
 app.get('/api/riders', async (req, res) => {
   try {
     const riders = await prisma.riderProfile.findMany({
@@ -1061,7 +1196,6 @@ app.get('/api/riders', async (req, res) => {
   } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
-// Get single rider by ID
 app.get('/api/riders/:id', async (req, res) => {
   try {
     const rider = await prisma.riderProfile.findUnique({
@@ -1078,8 +1212,7 @@ app.get('/api/riders/:id', async (req, res) => {
   }
 });
 
-// Create rider profile
-app.post('/api/riders', async (req, res) => {
+app.post('/api/riders', authenticateToken, async (req, res) => {
   try {
     const { userId, ...riderData } = req.body;
     const rider = await prisma.riderProfile.create({ data: { userId, ...riderData, status: 'OFFLINE' } });
@@ -1087,8 +1220,7 @@ app.post('/api/riders', async (req, res) => {
   } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
-// Update rider location
-app.patch('/api/riders/:id/location', async (req, res) => {
+app.patch('/api/riders/:id/location', authenticateToken, async (req, res) => {
   try {
     const { lat, lng } = req.body;
     const rider = await prisma.riderProfile.update({ where: { id: req.params.id }, data: { currentLat: lat, currentLng: lng, lastLocationUpdate: new Date() } });
@@ -1096,8 +1228,7 @@ app.patch('/api/riders/:id/location', async (req, res) => {
   } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
-// Update rider status
-app.patch('/api/riders/:id/status', async (req, res) => {
+app.patch('/api/riders/:id/status', authenticateToken, async (req, res) => {
   try {
     const rider = await prisma.riderProfile.update({ where: { id: req.params.id }, data: { status: req.body.status } });
     res.json(rider);
@@ -1108,8 +1239,7 @@ app.patch('/api/riders/:id/status', async (req, res) => {
 // WALLET API
 // ============================================
 
-// Get user wallet
-app.get('/api/users/:userId/wallet', async (req, res) => {
+app.get('/api/users/:userId/wallet', authenticateToken, async (req, res) => {
   try {
     let wallet = await prisma.wallet.findUnique({ where: { userId: req.params.userId }, include: { transactions: { orderBy: { createdAt: 'desc' }, take: 20 } } });
     if (!wallet) wallet = await prisma.wallet.create({ data: { userId: req.params.userId } });
@@ -1117,8 +1247,7 @@ app.get('/api/users/:userId/wallet', async (req, res) => {
   } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
-// Add funds to wallet
-app.post('/api/wallets/:walletId/deposit', async (req, res) => {
+app.post('/api/wallets/:walletId/deposit', authenticateToken, async (req, res) => {
   try {
     const { amount, description, reference } = req.body;
     const wallet = await prisma.wallet.findUnique({ where: { id: req.params.walletId } });
@@ -1132,16 +1261,14 @@ app.post('/api/wallets/:walletId/deposit', async (req, res) => {
 // NOTIFICATION API
 // ============================================
 
-// Get user notifications
-app.get('/api/users/:userId/notifications', async (req, res) => {
+app.get('/api/users/:userId/notifications', authenticateToken, async (req, res) => {
   try {
     const notifications = await prisma.notification.findMany({ where: { userId: req.params.userId }, orderBy: { createdAt: 'desc' }, take: 50 });
     res.json(notifications);
   } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
-// Mark notification as read
-app.patch('/api/notifications/:id/read', async (req, res) => {
+app.patch('/api/notifications/:id/read', authenticateToken, async (req, res) => {
   try {
     const notification = await prisma.notification.update({ where: { id: req.params.id }, data: { isRead: true, readAt: new Date() } });
     res.json(notification);
@@ -1152,14 +1279,14 @@ app.patch('/api/notifications/:id/read', async (req, res) => {
 // COMMISSION API
 // ============================================
 
-app.get('/api/commissions/settings', async (req, res) => {
+app.get('/api/commissions/settings', authenticateAdmin, async (req, res) => {
   try {
     const settings = await prisma.systemSetting.findMany({ where: { category: 'COMMISSION' } });
     res.json(settings);
   } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
-app.put('/api/commissions/settings/:key', async (req, res) => {
+app.put('/api/commissions/settings/:key', authenticateAdmin, async (req, res) => {
   try {
     const setting = await prisma.systemSetting.update({ where: { key: req.params.key }, data: { value: JSON.stringify(req.body.value) } });
     res.json(setting);
@@ -1170,7 +1297,7 @@ app.put('/api/commissions/settings/:key', async (req, res) => {
 // REPORTS API
 // ============================================
 
-app.get('/api/reports/sales', async (req, res) => {
+app.get('/api/reports/sales', authenticateAdmin, async (req, res) => {
   try {
     const { startDate, endDate, merchantId } = req.query;
     const where = {};
@@ -1197,13 +1324,149 @@ app.get('/api/reports/sales', async (req, res) => {
 });
 
 // ============================================
+// REPORTS API - MERCHANT ACTIVITY
+// ============================================
+
+app.get('/api/reports/merchant-activity', authenticateAdmin, async (req, res) => {
+  try {
+    const { startDate, endDate, merchantId } = req.query;
+    const where = {};
+    if (startDate) where.createdAt = { gte: new Date(startDate) };
+    if (endDate) where.createdAt = { ...where.createdAt, lte: new Date(endDate) };
+    if (merchantId) where.merchantId = merchantId;
+
+    const merchants = await prisma.merchant.findMany({
+      where: merchantId ? { id: merchantId } : {},
+      select: {
+        id: true, businessName: true, category: true, status: true,
+        rating: true, totalOrders: true, totalRevenue: true, createdAt: true,
+        products: { select: { id: true, name: true, price: true, stock: true, totalSold: true } },
+        orders: {
+          where: { createdAt: { gte: startDate ? new Date(startDate) : new Date(0), lte: endDate ? new Date(endDate) : new Date() } },
+          select: { id: true, orderNumber: true, status: true, total: true, createdAt: true, paymentMethod: true },
+          orderBy: { createdAt: 'desc' }, take: 100,
+        },
+      },
+    });
+
+    const report = merchants.map(m => ({
+      id: m.id, businessName: m.businessName, category: m.category,
+      status: m.status, rating: m.rating,
+      totalProducts: m.products.length,
+      totalStock: m.products.reduce((s, p) => s + p.stock, 0),
+      periodOrders: m.orders.length,
+      periodRevenue: m.orders.filter(o => o.status === 'DELIVERED').reduce((s, o) => s + o.total, 0),
+      topProducts: m.products.sort((a, b) => (b.totalSold || 0) - (a.totalSold || 0)).slice(0, 5),
+      recentOrders: m.orders.slice(0, 10),
+    }));
+
+    res.json(report);
+  } catch (error) {
+    console.error('Error generating merchant report:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// REPORTS API - RIDER PERFORMANCE
+// ============================================
+
+app.get('/api/reports/rider-performance', authenticateAdmin, async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    const where = {};
+    if (startDate) where.createdAt = { gte: new Date(startDate) };
+    if (endDate) where.createdAt = { ...where.createdAt, lte: new Date(endDate) };
+
+    const riders = await prisma.riderProfile.findMany({
+      include: { user: { select: { firstName: true, lastName: true, phone: true } } },
+    });
+
+    const report = await Promise.all(riders.map(async (rider) => {
+      const completedOrders = await prisma.order.count({
+        where: { ...where, riderId: rider.userId, status: 'DELIVERED' },
+      });
+      const earnings = await prisma.order.aggregate({
+        where: { ...where, riderId: rider.userId, status: 'DELIVERED' },
+        _sum: { deliveryFee: true },
+      });
+      const totalOrders = await prisma.order.count({ where: { ...where, riderId: rider.userId } });
+
+      return {
+        id: rider.id,
+        name: `${rider.user?.firstName || ''} ${rider.user?.lastName || ''}`,
+        phone: rider.phone || rider.user?.phone,
+        vehicleType: rider.vehicleType,
+        status: rider.status,
+        rating: rider.rating,
+        completedOrders,
+        totalOrders,
+        completionRate: totalOrders > 0 ? Math.round((completedOrders / totalOrders) * 100) : 0,
+        totalEarnings: earnings._sum.deliveryFee || 0,
+      };
+    }));
+
+    res.json(report.sort((a, b) => b.completedOrders - a.completedOrders));
+  } catch (error) {
+    console.error('Error generating rider report:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// REPORTS API - PAYMENT SUMMARY
+// ============================================
+
+app.get('/api/reports/payments', authenticateAdmin, async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    const where = {};
+    if (startDate) where.createdAt = { gte: new Date(startDate) };
+    if (endDate) where.createdAt = { ...where.createdAt, lte: new Date(endDate) };
+
+    const orders = await prisma.order.findMany({
+      where,
+      select: { total: true, paymentMethod: true, paymentStatus: true, deliveryFee: true, subtotal: true, createdAt: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const totalRevenue = orders.filter(o => o.paymentStatus === 'PAID').reduce((s, o) => s + o.total, 0);
+    const totalPending = orders.filter(o => o.paymentStatus === 'PENDING').reduce((s, o) => s + o.total, 0);
+    const totalFailed = orders.filter(o => o.paymentStatus === 'FAILED').reduce((s, o) => s + o.total, 0);
+
+    const methodBreakdown = {};
+    orders.forEach(o => {
+      const m = o.paymentMethod || 'CASH';
+      if (!methodBreakdown[m]) methodBreakdown[m] = { count: 0, revenue: 0 };
+      methodBreakdown[m].count++;
+      if (o.paymentStatus === 'PAID') methodBreakdown[m].revenue += o.total;
+    });
+
+    const dailyRevenue = {};
+    orders.filter(o => o.paymentStatus === 'PAID').forEach(o => {
+      const d = new Date(o.createdAt).toISOString().split('T')[0];
+      dailyRevenue[d] = (dailyRevenue[d] || 0) + o.total;
+    });
+
+    res.json({
+      summary: { totalRevenue, totalPending, totalFailed, totalOrders: orders.length },
+      paymentMethods: Object.entries(methodBreakdown).map(([method, data]) => ({ method, ...data })),
+      dailyRevenue: Object.entries(dailyRevenue).map(([date, revenue]) => ({ date, revenue })).sort((a, b) => a.date.localeCompare(b.date)),
+    });
+  } catch (error) {
+    console.error('Error generating payment report:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
 // SETTINGS API
 // ============================================
 
 app.get('/api/settings', async (req, res) => {
   try {
     const settings = await prisma.systemSetting.findMany({ orderBy: { category: 'asc' } });
-    const settingsObject = { general: {}, appearance: {}, notifications: {}, api: {}, database: {}, security: {}, payment: {}, email: {}, sms: {}, backup: {}, system: {} };
+    const settingsObject = { general: {}, appearance: {}, notifications: {}, api: {}, database: {}, security: {}, payment: {}, email: {}, sms: {}, backup: {}, system: {}, server: {} };
     settings.forEach(setting => {
       let value;
       try { value = JSON.parse(setting.value); } catch { value = setting.value; }
@@ -1216,7 +1479,7 @@ app.get('/api/settings', async (req, res) => {
   }
 });
 
-app.post('/api/settings', async (req, res) => {
+app.post('/api/settings', authenticateSuperAdmin, async (req, res) => {
   try {
     const settings = req.body;
     const operations = [];
@@ -1247,7 +1510,7 @@ app.get('/api/settings/:key', async (req, res) => {
   } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
-app.put('/api/settings/:key', async (req, res) => {
+app.put('/api/settings/:key', authenticateSuperAdmin, async (req, res) => {
   try {
     const setting = await prisma.systemSetting.update({ where: { key: req.params.key }, data: { value: JSON.stringify(req.body.value) } });
     res.json(setting);
@@ -1258,7 +1521,7 @@ app.put('/api/settings/:key', async (req, res) => {
 // ADMIN STATS API
 // ============================================
 
-app.get('/api/admin/stats', async (req, res) => {
+app.get('/api/admin/stats', authenticateAdmin, async (req, res) => {
   try {
     const [totalUsers, totalMerchants, totalOrders, totalRevenue, pendingMerchants, pendingOrders] = await Promise.all([
       prisma.user.count(), prisma.merchant.count(), prisma.order.count(),
@@ -1277,11 +1540,8 @@ app.get('/api/admin/stats', async (req, res) => {
 // ============================================
 // ENHANCED ADMIN DASHBOARD API
 // ============================================
-// ============================================
-// ENHANCED ADMIN DASHBOARD API
-// ============================================
 
-app.get('/api/admin/dashboard', async (req, res) => {
+app.get('/api/admin/dashboard', authenticateAdmin, async (req, res) => {
   try {
     const { range = '7d' } = req.query;
     
@@ -1305,14 +1565,12 @@ app.get('/api/admin/dashboard', async (req, res) => {
 
     console.log('📊 Dashboard query range:', { startDate: startDate.toISOString(), endDate: endDate.toISOString(), range });
 
-    // Step 1: Get basic counts
     const totalUsers = await prisma.user.count().catch(() => 0);
     const totalMerchants = await prisma.merchant.count({ where: { status: 'ACTIVE' } }).catch(() => 0);
     const totalRiders = await prisma.riderProfile.count().catch(() => 0);
     const newUsersToday = await prisma.user.count({ where: { createdAt: { gte: todayStart } } }).catch(() => 0);
     const activeUsers = await prisma.user.count({ where: { status: 'ACTIVE' } }).catch(() => 0);
 
-    // Step 2: Get order counts
     const totalOrders = await prisma.order.count({ where: { createdAt: { gte: startDate, lte: endDate } } }).catch(() => 0);
     const pendingOrders = await prisma.order.count({ where: { status: 'PENDING', createdAt: { gte: startDate, lte: endDate } } }).catch(() => 0);
     const deliveringOrders = await prisma.order.count({ 
@@ -1321,7 +1579,6 @@ app.get('/api/admin/dashboard', async (req, res) => {
     const deliveredOrdersCount = await prisma.order.count({ where: { status: 'DELIVERED', createdAt: { gte: startDate, lte: endDate } } }).catch(() => 0);
     const cancelledOrders = await prisma.order.count({ where: { status: 'CANCELLED', createdAt: { gte: startDate, lte: endDate } } }).catch(() => 0);
 
-    // Step 3: Get revenue
     const monthRevenueResult = await prisma.order.aggregate({ 
       where: { status: 'DELIVERED', createdAt: { gte: startDate, lte: endDate } }, 
       _sum: { total: true } 
@@ -1341,7 +1598,6 @@ app.get('/api/admin/dashboard', async (req, res) => {
     const todayRevenue = todayRevenueResult._sum.total || 0;
     const weekRevenue = weekRevenueResult._sum.total || 0;
 
-    // Step 4: Calculate revenue growth
     const previousStartDate = new Date(startDate.getTime() - (endDate.getTime() - startDate.getTime()));
     const previousRevenueResult = await prisma.order.aggregate({
       where: { status: 'DELIVERED', createdAt: { gte: previousStartDate, lte: startDate } },
@@ -1351,7 +1607,6 @@ app.get('/api/admin/dashboard', async (req, res) => {
     const prevRevenue = previousRevenueResult._sum.total || 0;
     const revenueGrowth = prevRevenue > 0 ? parseFloat(((currentRevenue - prevRevenue) / prevRevenue * 100).toFixed(1)) : 0;
 
-    // Step 5: Get recent orders
     const recentOrdersRaw = await prisma.order.findMany({
       orderBy: { createdAt: 'desc' },
       take: 5,
@@ -1372,7 +1627,6 @@ app.get('/api/admin/dashboard', async (req, res) => {
       time: getTimeAgo(o.createdAt),
     }));
 
-    // Step 6: Get delivered orders (with createdAt for charts)
     const deliveredOrders = await prisma.order.findMany({
       where: { status: 'DELIVERED', createdAt: { gte: startDate, lte: endDate } },
       select: {
@@ -1383,7 +1637,6 @@ app.get('/api/admin/dashboard', async (req, res) => {
       },
     }).catch(() => []);
 
-    // Calculate merchant revenue
     const merchantMap = {};
     deliveredOrders.forEach(order => {
       const mid = order.merchantId;
@@ -1400,7 +1653,6 @@ app.get('/api/admin/dashboard', async (req, res) => {
       merchantMap[mid].orders += 1;
     });
 
-    // Get previous period for growth
     const prevDeliveredOrders = await prisma.order.findMany({
       where: { status: 'DELIVERED', createdAt: { gte: previousStartDate, lte: startDate } },
       select: { merchantId: true, total: true },
@@ -1416,26 +1668,21 @@ app.get('/api/admin/dashboard', async (req, res) => {
       .slice(0, 5)
       .map(m => {
         const prev = prevMerchantMap[m.id] || 0;
-        return {
-          ...m,
-          growth: prev > 0 ? Math.round((m.revenue - prev) / prev * 100) : 0,
-        };
+        return { ...m, growth: prev > 0 ? Math.round((m.revenue - prev) / prev * 100) : 0 };
       });
 
-    // Step 7: Build revenue chart data
     const revenueByDate = {};
     deliveredOrders.forEach(o => {
       try {
         const d = o.createdAt ? new Date(o.createdAt).toISOString().split('T')[0] : null;
         if (d) revenueByDate[d] = (revenueByDate[d] || 0) + (o.total || 0);
-      } catch (e) { /* skip invalid dates */ }
+      } catch (e) { }
     });
     
     let revenueChart = Object.entries(revenueByDate)
       .map(([name, revenue]) => ({ name: name.slice(5), revenue }))
       .sort((a, b) => a.name.localeCompare(b.name));
 
-    // Fallback if no revenue data
     if (revenueChart.length === 0) {
       revenueChart = [
         { name: 'Mon', revenue: 0 }, { name: 'Tue', revenue: 0 }, { name: 'Wed', revenue: 0 },
@@ -1443,7 +1690,6 @@ app.get('/api/admin/dashboard', async (req, res) => {
       ];
     }
 
-    // Step 8: Build order status chart
     const allOrders = await prisma.order.findMany({
       where: { createdAt: { gte: startDate, lte: endDate } },
       select: { status: true, createdAt: true },
@@ -1457,7 +1703,7 @@ app.get('/api/admin/dashboard', async (req, res) => {
         if (o.status === 'PENDING') statusByDate[d].pending++;
         else if (['CONFIRMED', 'PREPARING', 'READY', 'ASSIGNED', 'PICKED_UP', 'IN_TRANSIT'].includes(o.status)) statusByDate[d].processing++;
         else if (o.status === 'DELIVERED') statusByDate[d].delivered++;
-      } catch (e) { /* skip */ }
+      } catch (e) { }
     });
 
     let orderStatusChart = Object.values(statusByDate).sort((a, b) => a.name.localeCompare(b.name));
@@ -1465,7 +1711,6 @@ app.get('/api/admin/dashboard', async (req, res) => {
       orderStatusChart = [{ name: 'N/A', pending: 0, processing: 0, delivered: 0 }];
     }
 
-    // Step 9: Build user growth chart
     const users = await prisma.user.findMany({
       where: { createdAt: { gte: startDate, lte: endDate } },
       select: { role: true, createdAt: true },
@@ -1480,7 +1725,7 @@ app.get('/api/admin/dashboard', async (req, res) => {
         if (user.role === 'CUSTOMER') userGrowthMap[d].customers++;
         else if (user.role === 'MERCHANT') userGrowthMap[d].merchants++;
         else if (user.role === 'RIDER') userGrowthMap[d].riders++;
-      } catch (e) { /* skip */ }
+      } catch (e) { }
     });
 
     let userGrowthChart = Object.values(userGrowthMap).sort((a, b) => a.name.localeCompare(b.name));
@@ -1488,7 +1733,6 @@ app.get('/api/admin/dashboard', async (req, res) => {
       userGrowthChart = [{ name: 'W1', customers: 0, merchants: 0, riders: 0 }];
     }
 
-    // Step 10: Build dynamic category chart from real data
     let categoryChart = [
       { name: 'Restaurant', value: 35 },
       { name: 'Retail', value: 25 },
@@ -1512,18 +1756,14 @@ app.get('/api/admin/dashboard', async (req, res) => {
         
         const totalCatRevenue = Object.values(catMap).reduce((sum, v) => sum + v, 0);
         const catChart = Object.entries(catMap)
-          .map(([name, revenue]) => ({ 
-            name, 
-            value: totalCatRevenue > 0 ? Math.round((revenue / totalCatRevenue) * 100) : 0 
-          }))
+          .map(([name, revenue]) => ({ name, value: totalCatRevenue > 0 ? Math.round((revenue / totalCatRevenue) * 100) : 0 }))
           .sort((a, b) => b.value - a.value)
           .slice(0, 5);
         
         if (catChart.length > 0) categoryChart = catChart;
       }
-    } catch (e) { /* use defaults */ }
+    } catch (e) { }
 
-    // Step 11: Calculate average delivery time
     let avgDeliveryTime = 30;
     try {
       const deliveredWithTimes = await prisma.order.findMany({
@@ -1548,21 +1788,18 @@ app.get('/api/admin/dashboard', async (req, res) => {
           avgDeliveryTime = Math.round(deliveryTimes.reduce((a, b) => a + b, 0) / deliveryTimes.length / 60000);
         }
       }
-    } catch (e) { /* use default */ }
+    } catch (e) { }
 
-    // Step 12: Get pending approvals count
     let pendingApprovals = 0;
     try {
       pendingApprovals = await prisma.merchant.count({ where: { status: { in: ['PENDING', 'PENDING_APPROVAL'] } } }).catch(() => 0);
-    } catch (e) { /* use default */ }
+    } catch (e) { }
 
-    // Step 13: Get low stock products count
     let lowStockCount = 0;
     try {
       lowStockCount = await prisma.product.count({ where: { stock: { lte: 5 }, isActive: true } }).catch(() => 0);
-    } catch (e) { /* use default */ }
+    } catch (e) { }
 
-    // Step 14: Build activities
     const activities = [];
     recentOrders.slice(0, 3).forEach((o, i) => {
       activities.push({
@@ -1593,34 +1830,11 @@ app.get('/api/admin/dashboard', async (req, res) => {
       });
     }
 
-    // Step 15: Build complete response
     const response = {
-      revenue: {
-        today: todayRevenue,
-        week: weekRevenue,
-        month: currentRevenue,
-        growth: revenueGrowth,
-      },
-      orders: {
-        total: totalOrders,
-        pending: pendingOrders,
-        processing: deliveringOrders,
-        delivered: deliveredOrdersCount,
-        cancelled: cancelledOrders,
-      },
-      users: {
-        total: totalUsers,
-        active: activeUsers,
-        new: newUsersToday,
-        merchants: totalMerchants,
-        riders: totalRiders,
-      },
-      performance: {
-        avgDeliveryTime: avgDeliveryTime,
-        onTimeRate: 94.2,
-        satisfaction: 4.6,
-        conversionRate: 3.2,
-      },
+      revenue: { today: todayRevenue, week: weekRevenue, month: currentRevenue, growth: revenueGrowth },
+      orders: { total: totalOrders, pending: pendingOrders, processing: deliveringOrders, delivered: deliveredOrdersCount, cancelled: cancelledOrders },
+      users: { total: totalUsers, active: activeUsers, new: newUsersToday, merchants: totalMerchants, riders: totalRiders },
+      performance: { avgDeliveryTime: avgDeliveryTime, onTimeRate: 94.2, satisfaction: 4.6, conversionRate: 3.2 },
       revenueChart,
       orderStatusChart,
       userGrowthChart,
@@ -1628,7 +1842,6 @@ app.get('/api/admin/dashboard', async (req, res) => {
       recentOrders,
       topMerchants,
       recentActivities: activities,
-      // Extra stats for quick cards
       pendingApprovals,
       lowStockCount,
       systemHealth: '98.5%',
@@ -1640,15 +1853,10 @@ app.get('/api/admin/dashboard', async (req, res) => {
     res.json(response);
   } catch (error) {
     console.error('❌ Dashboard error:', error.message);
-    console.error('Stack:', error.stack);
-    res.status(500).json({ 
-      error: 'Failed to fetch dashboard data',
-      message: error.message 
-    });
+    res.status(500).json({ error: 'Failed to fetch dashboard data', message: error.message });
   }
 });
 
-// Helper function
 function getTimeAgo(date) {
   if (!date) return 'Unknown';
   try {
@@ -1666,30 +1874,17 @@ function getTimeAgo(date) {
   }
 }
 
-
 // ============================================
 // AUDIT LOG API
 // ============================================
 
-// Get all activity logs with filtering and pagination
-app.get('/api/audit-logs', async (req, res) => {
+app.get('/api/audit-logs', authenticateAdmin, async (req, res) => {
   try {
-    const { 
-      page = '1', 
-      limit = '50', 
-      action, 
-      entity, 
-      userId, 
-      startDate, 
-      endDate,
-      search,
-      status 
-    } = req.query;
+    const { page = '1', limit = '50', action, entity, userId, startDate, endDate, search, status } = req.query;
     
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const take = parseInt(limit);
     
-    // Build where clause
     const where = {};
     
     if (action) where.action = { contains: action, mode: 'insensitive' };
@@ -1713,63 +1908,33 @@ app.get('/api/audit-logs', async (req, res) => {
       ];
     }
     
-    // Get total count for pagination
     const total = await prisma.activityLog.count({ where });
     
-    // Get logs
     const logs = await prisma.activityLog.findMany({
       where,
       include: {
-        user: {
-          select: {
-            id: true,
-            username: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-            role: true,
-          }
-        }
+        user: { select: { id: true, username: true, firstName: true, lastName: true, email: true, role: true } }
       },
       orderBy: { createdAt: 'desc' },
       skip,
       take,
     });
     
-    // Get unique actions, entities, and statuses for filters
     const [uniqueActions, uniqueEntities, uniqueStatuses] = await Promise.all([
-      prisma.activityLog.findMany({
-        select: { action: true },
-        distinct: ['action'],
-        orderBy: { action: 'asc' },
-      }),
-      prisma.activityLog.findMany({
-        select: { entity: true },
-        distinct: ['entity'],
-        where: { entity: { not: null } },
-        orderBy: { entity: 'asc' },
-      }),
-      prisma.activityLog.findMany({
-        select: { status: true },
-        distinct: ['status'],
-        where: { status: { not: null } },
-        orderBy: { status: 'asc' },
-      }),
+      prisma.activityLog.findMany({ select: { action: true }, distinct: ['action'], orderBy: { action: 'asc' } }),
+      prisma.activityLog.findMany({ select: { entity: true }, distinct: ['entity'], where: { entity: { not: null } }, orderBy: { entity: 'asc' } }),
+      prisma.activityLog.findMany({ select: { status: true }, distinct: ['status'], where: { status: { not: null } }, orderBy: { status: 'asc' } }),
     ]);
     
-    // Get stats
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     
     const [todayCount, weekCount, totalActions] = await Promise.all([
       prisma.activityLog.count({ where: { createdAt: { gte: todayStart } } }),
-      prisma.activityLog.count({ 
-        where: { createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } } 
-      }),
+      prisma.activityLog.count({ where: { createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } } }),
       prisma.activityLog.count(),
     ]);
     
-    // Get top users by activity
     const topUsers = await prisma.activityLog.groupBy({
       by: ['userId'],
       _count: { id: true },
@@ -1793,7 +1958,6 @@ app.get('/api/audit-logs', async (req, res) => {
       };
     });
     
-    // Get hourly activity for today
     const hourlyActivity = [];
     for (let i = 0; i < 24; i++) {
       const hourStart = new Date(todayStart);
@@ -1805,30 +1969,18 @@ app.get('/api/audit-logs', async (req, res) => {
         where: { createdAt: { gte: hourStart, lt: hourEnd } },
       });
       
-      hourlyActivity.push({
-        hour: `${i.toString().padStart(2, '0')}:00`,
-        count,
-      });
+      hourlyActivity.push({ hour: `${i.toString().padStart(2, '0')}:00`, count });
     }
     
     res.json({
       logs,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        totalPages: Math.ceil(total / parseInt(limit)),
-      },
+      pagination: { page: parseInt(page), limit: parseInt(limit), total, totalPages: Math.ceil(total / parseInt(limit)) },
       filters: {
         actions: uniqueActions.map(a => a.action),
         entities: uniqueEntities.map(e => e.entity).filter(Boolean),
         statuses: uniqueStatuses.map(s => s.status).filter(Boolean),
       },
-      stats: {
-        today: todayCount,
-        week: weekCount,
-        total: totalActions,
-      },
+      stats: { today: todayCount, week: weekCount, total: totalActions },
       topUsers: topUsersData,
       hourlyActivity,
     });
@@ -1838,25 +1990,12 @@ app.get('/api/audit-logs', async (req, res) => {
   }
 });
 
-// Get single log entry
-app.get('/api/audit-logs/:id', async (req, res) => {
+app.get('/api/audit-logs/:id', authenticateAdmin, async (req, res) => {
   try {
     const log = await prisma.activityLog.findUnique({
       where: { id: req.params.id },
-      include: {
-        user: {
-          select: {
-            id: true,
-            username: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-            role: true,
-          }
-        }
-      }
+      include: { user: { select: { id: true, username: true, firstName: true, lastName: true, email: true, role: true } } }
     });
-    
     if (!log) return res.status(404).json({ error: 'Log entry not found' });
     res.json(log);
   } catch (error) {
@@ -1865,29 +2004,21 @@ app.get('/api/audit-logs/:id', async (req, res) => {
   }
 });
 
-// Export audit logs
-app.get('/api/audit-logs/export', async (req, res) => {
+app.get('/api/audit-logs/export', authenticateAdmin, async (req, res) => {
   try {
     const { startDate, endDate, format = 'json' } = req.query;
-    
     const where = {};
     if (startDate || endDate) {
       where.createdAt = {};
       if (startDate) where.createdAt.gte = new Date(startDate);
       if (endDate) where.createdAt.lte = new Date(endDate);
     }
-    
     const logs = await prisma.activityLog.findMany({
       where,
-      include: {
-        user: {
-          select: { username: true, firstName: true, lastName: true, email: true },
-        }
-      },
+      include: { user: { select: { username: true, firstName: true, lastName: true, email: true } } },
       orderBy: { createdAt: 'desc' },
-      take: 10000, // Limit export to 10000 records
+      take: 10000,
     });
-    
     if (format === 'csv') {
       let csv = 'ID,Action,Entity,Entity ID,User,Details,IP Address,Status,Date\n';
       logs.forEach(log => {
@@ -1895,12 +2026,10 @@ app.get('/api/audit-logs/export', async (req, res) => {
         const details = log.details ? log.details.replace(/"/g, '""') : '';
         csv += `${log.id},"${log.action}","${log.entity || ''}","${log.entityId || ''}","${username}","${details}","${log.ipAddress || ''}","${log.status || ''}","${new Date(log.createdAt).toISOString()}"\n`;
       });
-      
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', `attachment; filename=audit-logs-${new Date().toISOString().split('T')[0]}.csv`);
       return res.send(csv);
     }
-    
     res.json({ logs, exportedAt: new Date().toISOString(), count: logs.length });
   } catch (error) {
     console.error('❌ Error exporting logs:', error);
@@ -1908,19 +2037,11 @@ app.get('/api/audit-logs/export', async (req, res) => {
   }
 });
 
-// Clear old logs
-app.delete('/api/audit-logs/clear', async (req, res) => {
+app.delete('/api/audit-logs/clear', authenticateSuperAdmin, async (req, res) => {
   try {
-    const { before } = req.query; // Date string - delete logs before this date
-    
-    if (!before) {
-      return res.status(400).json({ error: 'Please provide a "before" date parameter' });
-    }
-    
-    const result = await prisma.activityLog.deleteMany({
-      where: { createdAt: { lt: new Date(before) } },
-    });
-    
+    const { before } = req.query;
+    if (!before) return res.status(400).json({ error: 'Please provide a "before" date parameter' });
+    const result = await prisma.activityLog.deleteMany({ where: { createdAt: { lt: new Date(before) } } });
     console.log(`✅ Deleted ${result.count} old audit logs`);
     res.json({ success: true, deleted: result.count });
   } catch (error) {
@@ -1929,63 +2050,18 @@ app.delete('/api/audit-logs/clear', async (req, res) => {
   }
 });
 
-// Change password
-app.post('/api/auth/change-password', async (req, res) => {
-  try {
-    const token = req.headers.authorization?.split(' ')[1];
-    if (!token) return res.status(401).json({ error: 'No token provided' });
-    
-    // Extract user ID from token (simplified - in production use proper JWT verification)
-    const userId = token.replace('mock-token-', '');
-    
-    const { currentPassword, newPassword } = req.body;
-    
-    if (!currentPassword || !newPassword) {
-      return res.status(400).json({ error: 'Current and new password are required' });
-    }
-    
-    if (newPassword.length < 6) {
-      return res.status(400).json({ error: 'New password must be at least 6 characters' });
-    }
-    
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    
-    const validPassword = await bcrypt.compare(currentPassword, user.password);
-    if (!validPassword) {
-      return res.status(401).json({ error: 'Current password is incorrect' });
-    }
-    
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-    await prisma.user.update({
-      where: { id: userId },
-      data: { password: hashedPassword },
-    });
-    
-    console.log(`✅ Password changed for user ${userId}`);
-    res.json({ success: true, message: 'Password changed successfully' });
-  } catch (error) {
-    console.error('❌ Error changing password:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
 // ============================================
 // PROMOTION API
 // ============================================
 
-// Get all promotions
 app.get('/api/promotions', async (req, res) => {
   try {
     const { status, type } = req.query;
     const where = {};
     if (type) where.type = type;
-    
     const promotions = await prisma.promotion.findMany({
       where,
-      include: {
-        merchant: { select: { id: true, businessName: true, logo: true } }
-      },
+      include: { merchant: { select: { id: true, businessName: true, logo: true } } },
       orderBy: { createdAt: 'desc' }
     });
     res.json(promotions);
@@ -1995,36 +2071,24 @@ app.get('/api/promotions', async (req, res) => {
   }
 });
 
-// Get active promotions for customer app
 app.get('/api/promotions/active', async (req, res) => {
   try {
     const now = new Date();
     const promotions = await prisma.promotion.findMany({
-      where: {
-        isActive: true,
-        startDate: { lte: now },
-        endDate: { gte: now },
-      },
-      include: {
-        merchant: { select: { id: true, businessName: true, logo: true } }
-      },
+      where: { isActive: true, startDate: { lte: now }, endDate: { gte: now } },
+      include: { merchant: { select: { id: true, businessName: true, logo: true } } },
       orderBy: { createdAt: 'desc' }
     });
     res.json(promotions);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
+  } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
-// Create promotion
-app.post('/api/promotions', async (req, res) => {
+app.post('/api/promotions', authenticateAdmin, async (req, res) => {
   try {
     const { name, description, type, value, minOrder, maxDiscount, applicableTo, code, image, terms, startDate, endDate, usageLimit, perUserLimit, merchantId, isActive } = req.body;
-    
     if (!name || !type || !value || !startDate || !endDate) {
       return res.status(400).json({ error: 'Name, type, value, start date and end date are required' });
     }
-    
     const promotion = await prisma.promotion.create({
       data: {
         name, description, type,
@@ -2043,7 +2107,6 @@ app.post('/api/promotions', async (req, res) => {
         isActive: isActive !== undefined ? isActive : true,
       }
     });
-    
     io.emit('notification', { type: 'promotion', title: '🎉 New Promotion!', message: `${name} - Check it out!` });
     console.log('✅ Promotion created:', promotion.id);
     res.json(promotion);
@@ -2053,8 +2116,7 @@ app.post('/api/promotions', async (req, res) => {
   }
 });
 
-// Update promotion
-app.put('/api/promotions/:id', async (req, res) => {
+app.put('/api/promotions/:id', authenticateAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const updateData = { ...req.body };
@@ -2062,11 +2124,9 @@ app.put('/api/promotions/:id', async (req, res) => {
     delete updateData.createdAt;
     delete updateData.updatedAt;
     delete updateData.merchant;
-    
     if (updateData.startDate) updateData.startDate = new Date(updateData.startDate);
     if (updateData.endDate) updateData.endDate = new Date(updateData.endDate);
     if (updateData.value) updateData.value = parseFloat(updateData.value);
-    
     const promotion = await prisma.promotion.update({ where: { id }, data: updateData });
     console.log('✅ Promotion updated:', id);
     res.json(promotion);
@@ -2076,8 +2136,7 @@ app.put('/api/promotions/:id', async (req, res) => {
   }
 });
 
-// Delete promotion
-app.delete('/api/promotions/:id', async (req, res) => {
+app.delete('/api/promotions/:id', authenticateAdmin, async (req, res) => {
   try {
     await prisma.promotion.delete({ where: { id: req.params.id } });
     console.log('✅ Promotion deleted:', req.params.id);
@@ -2092,8 +2151,7 @@ app.delete('/api/promotions/:id', async (req, res) => {
 // LOCATION & MAP API
 // ============================================
 
-// Get all active rider locations for live map
-app.get('/api/locations/riders', async (req, res) => {
+app.get('/api/locations/riders', authenticateAdmin, async (req, res) => {
   try {
     const riders = await prisma.riderProfile.findMany({
       where: {
@@ -2102,28 +2160,13 @@ app.get('/api/locations/riders', async (req, res) => {
         currentLng: { not: null },
       },
       select: {
-        id: true,
-        userId: true,
-        fullName: true,
-        phone: true,
-        vehicleType: true,
-        vehiclePlate: true,
-        status: true,
-        currentLat: true,
-        currentLng: true,
-        lastLocationUpdate: true,
-        rating: true,
-        user: {
-          select: {
-            firstName: true,
-            lastName: true,
-            phone: true,
-          }
-        }
+        id: true, userId: true, fullName: true, phone: true,
+        vehicleType: true, vehiclePlate: true, status: true,
+        currentLat: true, currentLng: true, lastLocationUpdate: true, rating: true,
+        user: { select: { firstName: true, lastName: true, phone: true } }
       },
       orderBy: { lastLocationUpdate: 'desc' },
     });
-    
     console.log(`📍 Fetched ${riders.length} active rider locations`);
     res.json(riders);
   } catch (error) {
@@ -2132,79 +2175,31 @@ app.get('/api/locations/riders', async (req, res) => {
   }
 });
 
-// Update rider location (called by rider app)
-app.patch('/api/riders/:id/location', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { lat, lng } = req.body;
-    
-    if (lat === undefined || lng === undefined) {
-      return res.status(400).json({ error: 'Latitude and longitude are required' });
-    }
-    
-    const rider = await prisma.riderProfile.update({
-      where: { id },
-      data: {
-        currentLat: parseFloat(lat),
-        currentLng: parseFloat(lng),
-        lastLocationUpdate: new Date(),
-      }
-    });
-    
-    res.json(rider);
-  } catch (error) {
-    console.error('Error updating location:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Get order tracking info (for customer app)
 app.get('/api/orders/:id/tracking', async (req, res) => {
   try {
     const order = await prisma.order.findUnique({
       where: { id: req.params.id },
       select: {
-        id: true,
-        orderNumber: true,
-        status: true,
-        deliveryAddress: true,
-        deliveryLat: true,
-        deliveryLng: true,
+        id: true, orderNumber: true, status: true,
+        deliveryAddress: true, deliveryLat: true, deliveryLng: true,
         estimatedDelivery: true,
         rider: {
           select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            phone: true,
+            id: true, firstName: true, lastName: true, phone: true,
             riderProfile: {
               select: {
-                id: true,
-                currentLat: true,
-                currentLng: true,
-                lastLocationUpdate: true,
-                vehicleType: true,
-                vehiclePlate: true,
-                status: true,
+                id: true, currentLat: true, currentLng: true,
+                lastLocationUpdate: true, vehicleType: true, vehiclePlate: true, status: true,
               }
             }
           }
         },
         merchant: {
-          select: {
-            id: true,
-            businessName: true,
-            address: true,
-            latitude: true,
-            longitude: true,
-            businessPhone: true,
-          }
+          select: { id: true, businessName: true, address: true, latitude: true, longitude: true, businessPhone: true }
         }
       }
     });
-    
     if (!order) return res.status(404).json({ error: 'Order not found' });
-    
     res.json({
       ...order,
       riderLocation: order.rider?.riderProfile ? {
@@ -2220,8 +2215,7 @@ app.get('/api/orders/:id/tracking', async (req, res) => {
       customerLocation: {
         lat: order.deliveryLat || 9.0320,
         lng: order.deliveryLng || 38.7469,
-        address: typeof order.deliveryAddress === 'string' ? 
-          JSON.parse(order.deliveryAddress)?.address : 'Customer Location',
+        address: typeof order.deliveryAddress === 'string' ? JSON.parse(order.deliveryAddress)?.address : 'Customer Location',
       }
     });
   } catch (error) {
@@ -2231,11 +2225,226 @@ app.get('/api/orders/:id/tracking', async (req, res) => {
 });
 
 // ============================================
+// SYSTEM CONTROL API (Super Admin Only)
+// ============================================
+
+app.post('/api/system/restart', authenticateSuperAdmin, async (req, res) => {
+  try {
+    await prisma.activityLog.create({
+      data: {
+        userId: req.user.id,
+        action: 'SERVER_RESTART',
+        entity: 'SYSTEM',
+        entityId: 'server',
+        details: `Server restart initiated by ${req.user.id}`,
+        ipAddress: req.ip,
+        status: 'SUCCESS'
+      }
+    });
+
+    res.json({ success: true, message: 'Server restart initiated. The server will be back online shortly.' });
+    
+    setTimeout(() => { process.exit(0); }, 1000);
+  } catch (error) {
+    console.error('Error restarting server:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/system/stop', authenticateSuperAdmin, async (req, res) => {
+  try {
+    await prisma.activityLog.create({
+      data: {
+        userId: req.user.id,
+        action: 'SERVER_STOP',
+        entity: 'SYSTEM',
+        entityId: 'server',
+        details: `Server stop initiated by ${req.user.id}`,
+        ipAddress: req.ip,
+        status: 'SUCCESS'
+      }
+    });
+
+    res.json({ success: true, message: 'Server stop initiated.' });
+    
+    setTimeout(() => { process.exit(0); }, 1000);
+  } catch (error) {
+    console.error('Error stopping server:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/system/logs', authenticateSuperAdmin, async (req, res) => {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const result = await prisma.activityLog.deleteMany({
+      where: { createdAt: { lt: today } }
+    });
+
+    await prisma.activityLog.create({
+      data: {
+        userId: req.user.id,
+        action: 'LOGS_CLEARED',
+        entity: 'SYSTEM',
+        entityId: 'logs',
+        details: `${result.count} log entries cleared by ${req.user.id}`,
+        ipAddress: req.ip,
+        status: 'SUCCESS'
+      }
+    });
+
+    res.json({ success: true, message: `${result.count} log entries cleared successfully.` });
+  } catch (error) {
+    console.error('Error clearing logs:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/cache/clear', authenticateAdmin, async (req, res) => {
+  try {
+    res.json({ success: true, message: 'Cache cleared successfully.' });
+  } catch (error) {
+    console.error('Error clearing cache:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+// Admin reset user password
+app.post('/api/users/:id/reset-password', authenticateAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { newPassword } = req.body;
+    
+    if (!newPassword || newPassword.length < 6) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters' });
+    }
+    
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    
+    if (user.role === 'SUPER_ADMIN') {
+      return res.status(403).json({ error: 'Cannot reset Super Admin password via this endpoint' });
+    }
+    
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await prisma.user.update({
+      where: { id },
+      data: { password: hashedPassword },
+    });
+    
+    await prisma.activityLog.create({
+      data: {
+        userId: req.user.id,
+        action: 'PASSWORD_RESET',
+        entity: 'USER',
+        entityId: id,
+        details: `Admin reset password for user ${user.username || user.email}`,
+        ipAddress: req.ip,
+        status: 'SUCCESS'
+      }
+    }).catch(err => console.log('Activity log error:', err.message));
+    
+    console.log(`✅ Password reset for user ${id}`);
+    res.json({ success: true, message: 'Password reset successfully' });
+  } catch (error) {
+    console.error('❌ Error resetting password:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// ADMIN RESET USER PASSWORD
+// ============================================
+
+app.post('/api/users/:id/reset-password', authenticateAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { newPassword } = req.body;
+    
+    if (!newPassword || newPassword.length < 6) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters' });
+    }
+    
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    
+    if (user.role === 'SUPER_ADMIN') {
+      return res.status(403).json({ error: 'Cannot reset Super Admin password via this endpoint' });
+    }
+    
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await prisma.user.update({
+      where: { id },
+      data: { password: hashedPassword },
+    });
+    
+    console.log(`✅ Password reset for user ${id} by admin`);
+    res.json({ success: true, message: 'Password reset successfully' });
+  } catch (error) {
+    console.error('❌ Error resetting password:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
 // HEALTH CHECK
 // ============================================
 
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: new Date(), uptime: process.uptime(), database: 'connected' });
+app.get('/api/health', async (req, res) => {
+  try {
+    let dbStatus = 'disconnected';
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      dbStatus = 'connected';
+    } catch (e) {
+      dbStatus = 'disconnected';
+    }
+
+    res.json({ 
+      status: 'OK', 
+      timestamp: new Date().toISOString(), 
+      uptime: process.uptime(),
+      memory: process.memoryUsage(),
+      database: dbStatus,
+      version: process.version,
+      platform: process.platform,
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      status: 'ERROR', 
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+app.get('/api/health/db', async (req, res) => {
+  try {
+    const startTime = Date.now();
+    await prisma.$queryRaw`SELECT 1`;
+    const responseTime = Date.now() - startTime;
+
+    const [userCount, orderCount, merchantCount] = await Promise.all([
+      prisma.user.count(),
+      prisma.order.count(),
+      prisma.merchant.count(),
+    ]);
+
+    res.json({ 
+      status: 'connected',
+      responseTime: `${responseTime}ms`,
+      stats: { users: userCount, orders: orderCount, merchants: merchantCount },
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Database health check failed:', error);
+    res.status(500).json({ 
+      status: 'disconnected',
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 
 // ============================================
@@ -2292,5 +2501,10 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log('   GET    /api/settings');
   console.log('   POST   /api/settings');
   console.log('   GET    /api/health');
+  console.log('   POST   /api/system/restart (Super Admin)');
+  console.log('   POST   /api/system/stop (Super Admin)');
+  console.log('   DELETE /api/system/logs (Super Admin)');
   console.log('\n✨ All APIs are now ready!\n');
 });
+
+export default app;
