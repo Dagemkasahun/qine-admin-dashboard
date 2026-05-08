@@ -1,11 +1,13 @@
-// src/pages/admin/PendingApprovals.jsx - ENHANCED WITH DELETE & MORE
+// src/pages/admin/PendingApprovals.jsx - COMBINED APPROVAL + MERCHANT MANAGEMENT
 import { useState, useEffect, useContext } from 'react';
 import { 
   Check, X, Eye, Search, Filter, Trash2,
   Store, Mail, Phone, MapPin, Calendar, FileText,
   AlertCircle, CheckCircle, Clock, Building2,
   CreditCard, User, RefreshCw, ChevronDown,
-  ChevronUp, History, Shield, AlertTriangle
+  ChevronUp, History, Shield, AlertTriangle,
+  Ban, UserCheck, Star, Package, DollarSign,
+  BarChart3, Activity
 } from 'lucide-react';
 import apiClient from '../../api/client';
 import { ThemeContext } from '../../context/ThemeContext';
@@ -17,7 +19,7 @@ const PendingApprovals = () => {
   const { user: currentUser } = useAuth();
   const isSuperAdmin = currentUser?.role === 'SUPER_ADMIN';
   
-  const [pendingMerchants, setPendingMerchants] = useState([]);
+  const [merchants, setMerchants] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedMerchant, setSelectedMerchant] = useState(null);
   const [rejectionReason, setRejectionReason] = useState('');
@@ -25,22 +27,32 @@ const PendingApprovals = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [filter, setFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [expandedCard, setExpandedCard] = useState(null);
 
-  useEffect(() => { fetchPendingMerchants(); }, []);
+  useEffect(() => { fetchAllMerchants(); }, [statusFilter]);
 
-  const fetchPendingMerchants = async () => {
+  const fetchAllMerchants = async () => {
     setLoading(true);
     try {
       const response = await apiClient.get('/merchants');
-      const pending = response.data.filter(m => 
-        m.status === 'PENDING' || m.status === 'PENDING_APPROVAL'
-      );
+      let allMerchants = response.data || [];
       
+      // Filter by status if needed
+      if (statusFilter !== 'all') {
+        if (statusFilter === 'pending') {
+          allMerchants = allMerchants.filter(m => ['PENDING', 'PENDING_APPROVAL'].includes(m.status));
+        } else {
+          allMerchants = allMerchants.filter(m => m.status === statusFilter);
+        }
+      }
+      
+      // Fetch owner details for merchants without them
       const merchantsWithOwners = await Promise.all(
-        pending.map(async (merchant) => {
+        allMerchants.map(async (merchant) => {
+          if (merchant.owner) return merchant;
           try {
             const ownerResponse = await apiClient.get(`/users/${merchant.ownerId}`);
             return { ...merchant, owner: ownerResponse.data, submittedDate: merchant.createdAt };
@@ -50,135 +62,107 @@ const PendingApprovals = () => {
         })
       );
       
-      setPendingMerchants(merchantsWithOwners);
+      setMerchants(merchantsWithOwners);
     } catch (error) {
-      console.error('Error fetching pending merchants:', error);
-      setPendingMerchants([]);
+      console.error('Error fetching merchants:', error);
+      setMerchants([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   };
 
-  const handleRefresh = () => { setRefreshing(true); fetchPendingMerchants(); };
+  const handleRefresh = () => { setRefreshing(true); fetchAllMerchants(); };
 
-  // Approve merchant
+  // ===== APPROVE =====
   const handleApprove = async (merchantId, merchantName) => {
-    if (!window.confirm(`Approve "${merchantName}"? This merchant will be able to start selling.`)) return;
+    if (!window.confirm(`Approve "${merchantName}"?`)) return;
     try {
       await apiClient.post(`/merchants/${merchantId}/approve`);
-      setPendingMerchants(prev => prev.filter(m => m.id !== merchantId));
-      showToast.success('Merchant approved successfully!');
+      setMerchants(prev => prev.map(m => m.id === merchantId ? { ...m, status: 'ACTIVE' } : m));
+      showToast.success(`${merchantName} approved!`);
     } catch (error) {
       try {
-        await apiClient.patch(`/merchants/${merchantId}`, { status: 'ACTIVE', approvedAt: new Date().toISOString() });
-        setPendingMerchants(prev => prev.filter(m => m.id !== merchantId));
-        showToast.success('Merchant approved!');
-      } catch (patchError) {
-        showToast.error('Error approving merchant');
-      }
+        await apiClient.patch(`/merchants/${merchantId}`, { status: 'ACTIVE' });
+        setMerchants(prev => prev.map(m => m.id === merchantId ? { ...m, status: 'ACTIVE' } : m));
+        showToast.success('Approved!');
+      } catch { showToast.error('Error approving'); }
     }
   };
 
-  // Bulk approve all
+  // ===== APPROVE ALL PENDING =====
   const handleApproveAll = async () => {
-    if (pendingMerchants.length === 0) return;
-    if (!window.confirm(`Approve ALL ${pendingMerchants.length} pending merchants?`)) return;
+    const pending = merchants.filter(m => ['PENDING', 'PENDING_APPROVAL'].includes(m.status));
+    if (pending.length === 0) { showToast.info('No pending merchants'); return; }
+    if (!window.confirm(`Approve ALL ${pending.length} pending merchants?`)) return;
     let success = 0;
-    for (const merchant of pendingMerchants) {
-      try {
-        await apiClient.post(`/merchants/${merchant.id}/approve`);
-        success++;
-      } catch { /* skip */ }
+    for (const m of pending) {
+      try { await apiClient.post(`/merchants/${m.id}/approve`); success++; } catch {}
     }
-    showToast.success(`${success} merchants approved!`);
-    fetchPendingMerchants();
+    showToast.success(`${success} approved!`);
+    fetchAllMerchants();
   };
 
-  // Reject merchant
+  // ===== REJECT =====
+  const openRejectModal = (merchant) => {
+    setSelectedMerchant(merchant);
+    setRejectionReason('');
+    setShowRejectModal(true);
+  };
+
   const handleReject = async () => {
-    if (!rejectionReason.trim()) {
-      showToast.warning('Please provide a reason for rejection');
-      return;
-    }
+    if (!rejectionReason.trim()) { showToast.warning('Provide a reason'); return; }
     try {
       await apiClient.post(`/merchants/${selectedMerchant.id}/reject`, { reason: rejectionReason });
-      setPendingMerchants(prev => prev.filter(m => m.id !== selectedMerchant.id));
-      setShowRejectModal(false);
-      setSelectedMerchant(null);
-      setRejectionReason('');
-      showToast.success('Merchant rejected');
-    } catch (error) {
-      try {
-        await apiClient.patch(`/merchants/${selectedMerchant.id}`, { status: 'REJECTED', rejectionReason });
-        setPendingMerchants(prev => prev.filter(m => m.id !== selectedMerchant.id));
-        setShowRejectModal(false);
-        setSelectedMerchant(null);
-        setRejectionReason('');
-        showToast.success('Merchant rejected');
-      } catch { showToast.error('Error rejecting merchant'); }
-    }
+      setMerchants(prev => prev.map(m => m.id === selectedMerchant.id ? { ...m, status: 'REJECTED' } : m));
+      setShowRejectModal(false); setSelectedMerchant(null); setRejectionReason('');
+      showToast.success('Rejected');
+    } catch { showToast.error('Error rejecting'); }
   };
 
-  // ===== NEW: Delete merchant permanently =====
+  // ===== SUSPEND / ACTIVATE =====
+  const handleToggleStatus = async (merchant) => {
+    const newStatus = merchant.status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE';
+    const action = newStatus === 'ACTIVE' ? 'activate' : 'suspend';
+    if (!window.confirm(`${action} "${merchant.businessName}"?`)) return;
+    try {
+      await apiClient.patch(`/merchants/${merchant.id}`, { status: newStatus });
+      setMerchants(prev => prev.map(m => m.id === merchant.id ? { ...m, status: newStatus } : m));
+      showToast.success(`Merchant ${action}d`);
+    } catch { showToast.error(`Error ${action}ing`); }
+  };
+
+  // ===== DELETE =====
+  const openDeleteModal = (merchant) => {
+    if (!isSuperAdmin) { showToast.error('Only Super Admin can delete merchants'); return; }
+    setSelectedMerchant(merchant);
+    setShowDeleteModal(true);
+  };
+
   const handleDeleteMerchant = async () => {
-    if (!isSuperAdmin) {
-      showToast.error('Only Super Admin can permanently delete merchants');
-      return;
-    }
-
+    if (!isSuperAdmin) return;
     const merchant = selectedMerchant;
-    if (!window.confirm(`⚠️ PERMANENTLY DELETE "${merchant.businessName}"?\n\nThis will delete:\n- All products\n- All orders\n- All categories\n- The merchant account\n- The owner user account\n\nThis action CANNOT be undone!`)) return;
-
+    if (!window.confirm(`⚠️ PERMANENTLY DELETE "${merchant.businessName}"?\n\nThis will delete:\n- All products & orders\n- The owner user account\n\nThis CANNOT be undone!`)) return;
     setDeleting(true);
     try {
-      // Delete the owner user (which cascades to merchant, products, orders, etc.)
       await apiClient.delete(`/users/${merchant.ownerId}`);
-      setPendingMerchants(prev => prev.filter(m => m.id !== merchant.id));
-      setShowDeleteModal(false);
-      setSelectedMerchant(null);
-      showToast.success('Merchant permanently deleted');
+      setMerchants(prev => prev.filter(m => m.id !== merchant.id));
+      setShowDeleteModal(false); setSelectedMerchant(null);
+      showToast.success('Deleted permanently');
     } catch (error) {
-      console.error('Error deleting merchant:', error);
-      // Try deleting just the merchant if user deletion fails
       try {
         await apiClient.delete(`/merchants/${merchant.id}`);
-        setPendingMerchants(prev => prev.filter(m => m.id !== merchant.id));
-        showToast.success('Merchant deleted (owner user may need manual cleanup)');
-      } catch {
-        showToast.error('Error deleting merchant: ' + (error.response?.data?.error || error.message));
-      }
+        setMerchants(prev => prev.filter(m => m.id !== merchant.id));
+        showToast.success('Merchant deleted (owner may need manual cleanup)');
+      } catch { showToast.error('Error: ' + (error.response?.data?.error || error.message)); }
     } finally {
       setDeleting(false);
     }
   };
 
-  // Delete any merchant by ID (from the list directly)
-  const handleQuickDelete = async (merchantId, merchantName) => {
-    if (!isSuperAdmin) {
-      showToast.error('Only Super Admin can delete merchants');
-      return;
-    }
-    if (!window.confirm(`⚠️ Permanently delete "${merchantName}"?\n\nThis action cannot be undone!`)) return;
-    try {
-      const merchant = pendingMerchants.find(m => m.id === merchantId);
-      if (merchant?.ownerId) {
-        await apiClient.delete(`/users/${merchant.ownerId}`);
-      } else {
-        await apiClient.delete(`/merchants/${merchantId}`);
-      }
-      setPendingMerchants(prev => prev.filter(m => m.id !== merchantId));
-      showToast.success('Merchant deleted');
-    } catch (error) {
-      showToast.error('Error deleting merchant');
-    }
-  };
+  const toggleExpand = (id) => setExpandedCard(expandedCard === id ? null : id);
 
-  const toggleExpand = (id) => {
-    setExpandedCard(expandedCard === id ? null : id);
-  };
-
-  const filteredMerchants = pendingMerchants.filter(merchant => {
+  const filteredMerchants = merchants.filter(merchant => {
     if (filter !== 'all' && merchant.businessType !== filter) return false;
     if (searchTerm) {
       const s = searchTerm.toLowerCase();
@@ -186,17 +170,34 @@ const PendingApprovals = () => {
         merchant.businessName?.toLowerCase().includes(s) ||
         merchant.owner?.firstName?.toLowerCase().includes(s) ||
         merchant.owner?.lastName?.toLowerCase().includes(s) ||
-        merchant.businessEmail?.toLowerCase().includes(s)
+        merchant.businessEmail?.toLowerCase().includes(s) ||
+        merchant.category?.toLowerCase().includes(s)
       );
     }
     return true;
   });
 
   const stats = {
-    total: pendingMerchants.length,
-    restaurant: pendingMerchants.filter(m => m.businessType === 'RESTAURANT').length,
-    product: pendingMerchants.filter(m => m.businessType === 'PRODUCT').length,
-    service: pendingMerchants.filter(m => m.businessType === 'SERVICE').length,
+    total: merchants.length,
+    pending: merchants.filter(m => ['PENDING', 'PENDING_APPROVAL'].includes(m.status)).length,
+    active: merchants.filter(m => m.status === 'ACTIVE').length,
+    suspended: merchants.filter(m => m.status === 'SUSPENDED').length,
+    rejected: merchants.filter(m => m.status === 'REJECTED').length,
+    restaurant: merchants.filter(m => m.businessType === 'RESTAURANT').length,
+    product: merchants.filter(m => m.businessType === 'PRODUCT').length,
+    service: merchants.filter(m => m.businessType === 'SERVICE').length,
+  };
+
+  const getStatusBadge = (status) => {
+    const badges = {
+      ACTIVE: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400',
+      PENDING: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
+      PENDING_APPROVAL: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400',
+      SUSPENDED: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
+      REJECTED: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-400',
+      INACTIVE: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-400',
+    };
+    return badges[status] || badges.PENDING;
   };
 
   const cardClass = darkMode ? 'bg-gray-800 border border-gray-700 text-white' : 'bg-white border border-gray-200 text-gray-900';
@@ -207,11 +208,12 @@ const PendingApprovals = () => {
   if (loading) {
     return (
       <div className="p-6">
-        <div className="animate-pulse">
-          <div className={`h-8 w-64 mb-6 rounded ${darkMode ? 'bg-gray-700' : 'bg-gray-200'}`}></div>
-          <div className="grid grid-cols-4 gap-4 mb-6">
-            {[1,2,3,4].map(i => <div key={i} className={`h-24 rounded ${darkMode ? 'bg-gray-700' : 'bg-gray-200'}`}></div>)}
+        <div className="animate-pulse space-y-4">
+          <div className={`h-8 w-64 rounded ${darkMode ? 'bg-gray-700' : 'bg-gray-200'}`}></div>
+          <div className="grid grid-cols-7 gap-4">
+            {[1,2,3,4,5,6,7].map(i => <div key={i} className={`h-16 rounded ${darkMode ? 'bg-gray-700' : 'bg-gray-200'}`}></div>)}
           </div>
+          <div className={`h-32 rounded ${darkMode ? 'bg-gray-700' : 'bg-gray-200'}`}></div>
         </div>
       </div>
     );
@@ -224,15 +226,16 @@ const PendingApprovals = () => {
         <div>
           <h1 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
             {isSuperAdmin && <Shield className="inline w-6 h-6 mr-2 text-yellow-500" />}
-            Merchant Approvals
+            Merchant Management
           </h1>
-          <p className={mutedClass}>Review, approve, reject, or delete merchant applications</p>
+          <p className={mutedClass}>
+            {isSuperAdmin ? 'Full control: Approve, reject, suspend, or delete merchants' : 'Review and manage merchant applications'}
+          </p>
         </div>
         <div className="flex gap-2">
-          {isSuperAdmin && pendingMerchants.length > 0 && (
-            <button onClick={handleApproveAll}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2 text-sm">
-              <CheckCircle className="w-4 h-4" /> Approve All ({stats.total})
+          {stats.pending > 0 && (
+            <button onClick={handleApproveAll} className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2 text-sm">
+              <CheckCircle className="w-4 h-4" /> Approve All ({stats.pending})
             </button>
           )}
           <button onClick={handleRefresh} disabled={refreshing}
@@ -242,29 +245,67 @@ const PendingApprovals = () => {
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <div className={`${cardClass} rounded-lg shadow p-4`}><p className={`text-sm ${mutedClass}`}>Total Pending</p><p className="text-2xl font-bold text-yellow-600">{stats.total}</p></div>
-        <div className={`${cardClass} rounded-lg shadow p-4`}><p className={`text-sm ${mutedClass}`}>Restaurants</p><p className="text-2xl font-bold text-orange-600">{stats.restaurant}</p></div>
-        <div className={`${cardClass} rounded-lg shadow p-4`}><p className={`text-sm ${mutedClass}`}>Product Shops</p><p className="text-2xl font-bold text-blue-600">{stats.product}</p></div>
-        <div className={`${cardClass} rounded-lg shadow p-4`}><p className={`text-sm ${mutedClass}`}>Services</p><p className="text-2xl font-bold text-purple-600">{stats.service}</p></div>
+      {/* Stats Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-6">
+        <div className={`${cardClass} rounded-lg shadow p-3 text-center`}>
+          <p className={`text-xs ${mutedClass}`}>Total</p>
+          <p className="text-xl font-bold">{stats.total}</p>
+        </div>
+        <div className={`${cardClass} rounded-lg shadow p-3 text-center border-l-4 border-yellow-500`}>
+          <p className={`text-xs ${mutedClass}`}>Pending</p>
+          <p className="text-xl font-bold text-yellow-600">{stats.pending}</p>
+        </div>
+        <div className={`${cardClass} rounded-lg shadow p-3 text-center border-l-4 border-green-500`}>
+          <p className={`text-xs ${mutedClass}`}>Active</p>
+          <p className="text-xl font-bold text-green-600">{stats.active}</p>
+        </div>
+        <div className={`${cardClass} rounded-lg shadow p-3 text-center border-l-4 border-red-500`}>
+          <p className={`text-xs ${mutedClass}`}>Suspended</p>
+          <p className="text-xl font-bold text-red-600">{stats.suspended}</p>
+        </div>
+        <div className={`${cardClass} rounded-lg shadow p-3 text-center border-l-4 border-gray-500`}>
+          <p className={`text-xs ${mutedClass}`}>Rejected</p>
+          <p className="text-xl font-bold text-gray-600">{stats.rejected}</p>
+        </div>
+        <div className={`${cardClass} rounded-lg shadow p-3 text-center`}>
+          <p className={`text-xs ${mutedClass}`}>Restaurants</p>
+          <p className="text-xl font-bold text-orange-600">{stats.restaurant}</p>
+        </div>
+        <div className={`${cardClass} rounded-lg shadow p-3 text-center`}>
+          <p className={`text-xs ${mutedClass}`}>Products</p>
+          <p className="text-xl font-bold text-blue-600">{stats.product}</p>
+        </div>
       </div>
 
       {/* Filters */}
       <div className={`${cardClass} rounded-lg shadow p-4 mb-6`}>
-        <div className="flex flex-wrap items-center gap-4">
+        <div className="flex flex-wrap items-center gap-3">
           <Filter className="w-4 h-4 text-gray-500" />
-          <select value={filter} onChange={(e) => setFilter(e.target.value)} className={`border rounded-lg px-3 py-2 ${inputClass}`}>
+          
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
+            className={`border rounded-lg px-3 py-2 text-sm ${inputClass}`}>
+            <option value="all">All Status</option>
+            <option value="pending">Pending Approval</option>
+            <option value="ACTIVE">Active</option>
+            <option value="SUSPENDED">Suspended</option>
+            <option value="REJECTED">Rejected</option>
+            <option value="INACTIVE">Inactive</option>
+          </select>
+
+          <select value={filter} onChange={(e) => setFilter(e.target.value)}
+            className={`border rounded-lg px-3 py-2 text-sm ${inputClass}`}>
             <option value="all">All Types</option>
             <option value="RESTAURANT">Restaurant</option>
             <option value="PRODUCT">Product</option>
             <option value="SERVICE">Service</option>
             <option value="PROMOTION">Promotion</option>
           </select>
-          <div className="flex-1 relative">
+
+          <div className="flex-1 relative min-w-[200px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <input type="text" placeholder="Search by business name, owner, or email..." value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)} className={`w-full pl-9 pr-4 py-2 border rounded-lg ${inputClass}`} />
+            <input type="text" placeholder="Search by name, email, category..." value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className={`w-full pl-9 pr-4 py-2 border rounded-lg text-sm ${inputClass}`} />
           </div>
         </div>
       </div>
@@ -272,59 +313,91 @@ const PendingApprovals = () => {
       {/* Merchants List */}
       {filteredMerchants.length === 0 ? (
         <div className={`${cardClass} rounded-lg shadow p-12 text-center`}>
-          <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold mb-2">No Pending Approvals</h3>
-          <p className={mutedClass}>All merchant applications have been processed.</p>
+          <Store className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold mb-2">No Merchants Found</h3>
+          <p className={mutedClass}>{searchTerm ? 'Try adjusting your filters.' : 'All caught up!'}</p>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {filteredMerchants.map((merchant) => (
-            <div key={merchant.id} className={`${cardClass} rounded-lg shadow p-6`}>
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div className="flex items-start gap-4 flex-1">
-                  <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
-                    <Store className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+            <div key={merchant.id} className={`${cardClass} rounded-lg shadow p-4`}>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="flex items-start gap-3 flex-1 cursor-pointer" onClick={() => toggleExpand(merchant.id)}>
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                    darkMode ? 'bg-blue-900/30' : 'bg-blue-100'
+                  }`}>
+                    <Store className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                   </div>
                   <div className="flex-1">
-                    <div className="flex items-center gap-2 cursor-pointer" onClick={() => toggleExpand(merchant.id)}>
-                      <h3 className="font-semibold text-lg">{merchant.businessName}</h3>
-                      {expandedCard === merchant.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold">{merchant.businessName}</h3>
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusBadge(merchant.status)}`}>
+                        {merchant.status?.replace(/_/g, ' ')}
+                      </span>
+                      {expandedCard === merchant.id ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                     </div>
-                    <div className="flex flex-wrap gap-3 mt-1 text-sm">
-                      <span className={`flex items-center gap-1 ${mutedClass}`}><MapPin className="w-3 h-3" /> {merchant.city}</span>
-                      <span className={`flex items-center gap-1 ${mutedClass}`}><Calendar className="w-3 h-3" /> {new Date(merchant.createdAt).toLocaleDateString()}</span>
-                      <span className={`px-2 py-0.5 rounded-full text-xs ${darkMode ? 'bg-purple-900/30 text-purple-300' : 'bg-purple-100 text-purple-800'}`}>{merchant.businessType}</span>
+                    <div className="flex flex-wrap gap-3 mt-1 text-xs">
+                      <span className={mutedClass}>{merchant.category}</span>
+                      <span className={mutedClass}>•</span>
+                      <span className={mutedClass}>{merchant.city || 'N/A'}</span>
+                      {merchant.rating > 0 && <><span className={mutedClass}>•</span><span className="text-yellow-600">⭐ {merchant.rating?.toFixed(1)}</span></>}
+                      <span className={mutedClass}>•</span>
+                      <span className={mutedClass}>{merchant.totalOrders || 0} orders</span>
                     </div>
-                    {/* Quick info */}
-                    <div className="grid grid-cols-3 gap-4 mt-3 text-sm">
-                      <div><span className={mutedClass}>Owner: </span>{merchant.owner?.firstName} {merchant.owner?.lastName}</div>
-                      <div><span className={mutedClass}>Email: </span>{merchant.businessEmail || 'N/A'}</div>
-                      <div><span className={mutedClass}>Phone: </span>{merchant.businessPhone || 'N/A'}</div>
+                    {/* Owner info */}
+                    <div className="text-xs mt-1">
+                      <span className={mutedClass}>Owner: </span>
+                      {merchant.owner?.firstName} {merchant.owner?.lastName}
+                      <span className="mx-2">|</span>
+                      <Mail className="w-3 h-3 inline" /> {merchant.businessEmail || merchant.owner?.email || 'N/A'}
+                      <span className="mx-2">|</span>
+                      <Phone className="w-3 h-3 inline" /> {merchant.businessPhone || merchant.owner?.phone || 'N/A'}
                     </div>
                   </div>
                 </div>
 
                 {/* Action Buttons */}
-                <div className="flex items-center gap-2 flex-shrink-0">
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  {/* View Details */}
                   <button onClick={() => setSelectedMerchant(merchant)}
-                    className={`px-3 py-2 rounded-lg flex items-center gap-1 text-sm ${darkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-100 hover:bg-gray-200'}`}>
-                    <Eye className="w-4 h-4" /> View Details
-                  </button>
-                  <button onClick={() => handleApprove(merchant.id, merchant.businessName)}
-                    className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-1 text-sm">
-                    <Check className="w-4 h-4" /> Approve
-                  </button>
-                  <button onClick={() => { setSelectedMerchant(merchant); setShowRejectModal(true); }}
-                    className="px-3 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-1 text-sm">
-                    <X className="w-4 h-4" /> Reject
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1 ${darkMode ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-100 hover:bg-gray-200'}`}>
+                    <Eye className="w-3 h-3" /> View
                   </button>
 
-                  {/* Delete Button - Super Admin Only */}
+                  {/* Approve (for pending) */}
+                  {['PENDING', 'PENDING_APPROVAL'].includes(merchant.status) && (
+                    <button onClick={() => handleApprove(merchant.id, merchant.businessName)}
+                      className="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 text-xs font-medium flex items-center gap-1">
+                      <Check className="w-3 h-3" /> Approve
+                    </button>
+                  )}
+
+                  {/* Reject (for pending) */}
+                  {['PENDING', 'PENDING_APPROVAL'].includes(merchant.status) && (
+                    <button onClick={() => openRejectModal(merchant)}
+                      className="px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700 text-xs font-medium flex items-center gap-1">
+                      <X className="w-3 h-3" /> Reject
+                    </button>
+                  )}
+
+                  {/* Suspend/Activate (for active/suspended) */}
+                  {['ACTIVE', 'SUSPENDED'].includes(merchant.status) && (
+                    <button onClick={() => handleToggleStatus(merchant)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1 ${
+                        merchant.status === 'ACTIVE' 
+                          ? 'bg-yellow-600 text-white hover:bg-yellow-700' 
+                          : 'bg-green-600 text-white hover:bg-green-700'
+                      }`}>
+                      {merchant.status === 'ACTIVE' ? <><Ban className="w-3 h-3" /> Suspend</> : <><UserCheck className="w-3 h-3" /> Activate</>}
+                    </button>
+                  )}
+
+                  {/* Delete (Super Admin only) */}
                   {isSuperAdmin && (
-                    <button onClick={() => handleQuickDelete(merchant.id, merchant.businessName)}
-                      className="px-3 py-2 bg-red-700 text-white rounded-lg hover:bg-red-800 flex items-center gap-1 text-sm"
-                      title="Permanently delete merchant and owner">
-                      <Trash2 className="w-4 h-4" />
+                    <button onClick={() => openDeleteModal(merchant)}
+                      className="px-3 py-1.5 bg-red-700 text-white rounded-lg hover:bg-red-800 text-xs font-medium flex items-center gap-1"
+                      title="Permanently delete">
+                      <Trash2 className="w-3 h-3" />
                     </button>
                   )}
                 </div>
@@ -332,21 +405,18 @@ const PendingApprovals = () => {
 
               {/* Expanded details */}
               {expandedCard === merchant.id && (
-                <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <p className={`text-xs font-bold ${mutedClass} uppercase`}>Business Details</p>
-                      <p className="text-sm">Category: {merchant.category}{merchant.subCategory ? ` - ${merchant.subCategory}` : ''}</p>
-                      <p className="text-sm">Address: {merchant.address}</p>
-                      <p className="text-sm">{merchant.description || 'No description'}</p>
-                    </div>
-                    <div>
-                      <p className={`text-xs font-bold ${mutedClass} uppercase`}>License & Tax</p>
-                      <p className="text-sm">License: {merchant.licenseNumber || 'N/A'}</p>
-                      <p className="text-sm">TIN: {merchant.tinNumber || 'N/A'}</p>
-                      <p className="text-sm">Established: {merchant.yearEstablished || 'N/A'}</p>
-                    </div>
-                  </div>
+                <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700 grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                  <div><span className={`font-bold ${mutedClass}`}>Type:</span> {merchant.businessType}</div>
+                  <div><span className={`font-bold ${mutedClass}`}>Category:</span> {merchant.category}</div>
+                  <div><span className={`font-bold ${mutedClass}`}>Address:</span> {merchant.address}</div>
+                  <div><span className={`font-bold ${mutedClass}`}>Joined:</span> {new Date(merchant.createdAt).toLocaleDateString()}</div>
+                  <div><span className={`font-bold ${mutedClass}`}>License:</span> {merchant.licenseNumber || 'N/A'}</div>
+                  <div><span className={`font-bold ${mutedClass}`}>TIN:</span> {merchant.tinNumber || 'N/A'}</div>
+                  <div><span className={`font-bold ${mutedClass}`}>Total Orders:</span> {merchant.totalOrders || 0}</div>
+                  <div><span className={`font-bold ${mutedClass}`}>Revenue:</span> ETB {merchant.totalRevenue?.toLocaleString() || 0}</div>
+                  {merchant.description && (
+                    <div className="col-span-full"><span className={`font-bold ${mutedClass}`}>Description:</span> {merchant.description}</div>
+                  )}
                 </div>
               )}
             </div>
@@ -359,7 +429,12 @@ const PendingApprovals = () => {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className={`rounded-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto ${darkMode ? 'bg-gray-800 text-white' : 'bg-white'}`}>
             <div className={`p-6 border-b flex justify-between items-center sticky top-0 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
-              <h2 className="text-xl font-bold">Merchant Application Details</h2>
+              <h2 className="text-xl font-bold">
+                {selectedMerchant.businessName}
+                <span className={`ml-3 px-2 py-0.5 rounded-full text-xs ${getStatusBadge(selectedMerchant.status)}`}>
+                  {selectedMerchant.status?.replace(/_/g, ' ')}
+                </span>
+              </h2>
               <button onClick={() => setSelectedMerchant(null)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full"><X className="w-5 h-5" /></button>
             </div>
             <div className="p-6 space-y-6">
@@ -390,24 +465,24 @@ const PendingApprovals = () => {
                 </div>
               </div>
 
-              {/* Action Buttons */}
+              {/* Actions */}
               <div className="flex flex-wrap justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
                 {isSuperAdmin && (
-                  <button onClick={() => { setShowDeleteModal(true); setShowRejectModal(false); }}
+                  <button onClick={() => openDeleteModal(selectedMerchant)}
                     className="px-4 py-2 bg-red-700 text-white rounded-lg hover:bg-red-800 flex items-center gap-2">
                     <Trash2 className="w-4 h-4" /> Delete Permanently
                   </button>
                 )}
                 <button onClick={() => setSelectedMerchant(null)}
                   className={`px-4 py-2 border rounded-lg ${darkMode ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-300 hover:bg-gray-50'}`}>Close</button>
-                <button onClick={() => setShowRejectModal(true)}
-                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-2">
-                  <X className="w-4 h-4" /> Reject
-                </button>
-                <button onClick={() => handleApprove(selectedMerchant.id, selectedMerchant.businessName)}
-                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-2">
-                  <Check className="w-4 h-4" /> Approve
-                </button>
+                {['PENDING', 'PENDING_APPROVAL'].includes(selectedMerchant.status) && (
+                  <>
+                    <button onClick={() => { setSelectedMerchant(null); openRejectModal(selectedMerchant); }}
+                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700">Reject</button>
+                    <button onClick={() => { handleApprove(selectedMerchant.id, selectedMerchant.businessName); setSelectedMerchant(null); }}
+                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">Approve</button>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -419,8 +494,7 @@ const PendingApprovals = () => {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className={`rounded-xl max-w-md w-full ${darkMode ? 'bg-gray-800 text-white' : 'bg-white'}`}>
             <div className={`p-6 border-b ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-              <h2 className="text-xl font-bold">Reject Application</h2>
-              <p className={`${mutedClass} mt-1`}>Please provide a reason for rejecting {selectedMerchant.businessName}</p>
+              <h2 className="text-xl font-bold">Reject: {selectedMerchant.businessName}</h2>
             </div>
             <div className="p-6">
               <label className="block text-sm font-medium mb-2">Rejection Reason</label>
@@ -449,12 +523,12 @@ const PendingApprovals = () => {
             </div>
             <div className="p-6">
               <div className={`p-4 rounded-lg mb-4 ${darkMode ? 'bg-red-900/20 border-red-800' : 'bg-red-50 border-red-200'} border`}>
-                <p className="font-medium">You are about to delete:</p>
+                <p className="font-medium">You are about to permanently delete:</p>
                 <ul className="list-disc ml-5 mt-2 text-sm space-y-1">
-                  <li><strong>{selectedMerchant.businessName}</strong> (Merchant)</li>
+                  <li><strong>{selectedMerchant.businessName}</strong></li>
                   <li>All products under this merchant</li>
                   <li>All orders associated with this merchant</li>
-                  <li>The owner user account: <strong>{selectedMerchant.owner?.firstName} {selectedMerchant.owner?.lastName}</strong></li>
+                  <li>The owner user account</li>
                 </ul>
               </div>
               <div className="flex justify-end gap-3">
