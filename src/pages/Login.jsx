@@ -1,4 +1,4 @@
-// src/pages/Login.jsx - PROFESSIONAL ENHANCED VERSION
+// src/pages/Login.jsx - Professional Login with Optimized Logo
 import { useState, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -73,25 +73,32 @@ const Login = () => {
       <div className="max-w-md w-full relative z-10">
         {/* Logo & Brand Section */}
         <div className="text-center mb-8">
-          {/* Logo - Clean, no frame, large display */}
+          {/* Logo - Optimized for 1487x1512px image */}
           <div className="flex justify-center mb-6">
-            <img 
-              src={logoImage} 
-              alt="Qine Consulting" 
-              className="w-auto h-24 md:h-28 object-contain mx-auto"
-              onError={(e) => {
-                e.target.style.display = 'none';
-                const fallback = document.createElement('div');
-                fallback.className = 'flex flex-col items-center justify-center mx-auto';
-                fallback.innerHTML = `
-                  <svg class="w-16 h-16 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                  </svg>
-                  <span class="text-lg font-bold text-blue-600 mt-2">QINE</span>
-                `;
-                e.target.parentNode.appendChild(fallback);
-              }}
-            />
+            <div className="relative w-40 h-40 md:w-48 md:h-48 flex items-center justify-center">
+              <img 
+                src={logoImage} 
+                alt="Qine Consulting" 
+                className="w-full h-full object-contain"
+                style={{
+                  imageRendering: 'crisp-edges',
+                  maxWidth: '100%',
+                  height: 'auto'
+                }}
+                onError={(e) => {
+                  e.target.style.display = 'none';
+                  const fallback = document.createElement('div');
+                  fallback.className = 'flex flex-col items-center justify-center';
+                  fallback.innerHTML = `
+                    <svg class="w-16 h-16 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                    </svg>
+                    <span class="text-lg font-bold text-blue-600 mt-2">QINE</span>
+                  `;
+                  e.target.parentNode.appendChild(fallback);
+                }}
+              />
+            </div>
           </div>
           
           {/* Brand Name */}
