@@ -2859,6 +2859,53 @@ app.get('/api/orders/:id/tracking', async (req, res) => {
   }
 });
 
+// Add this to server.js - safe for production
+// GET /api/locations/riders - UPDATED with stale rider filtering
+app.get('/api/locations/riders', authenticateAdmin, async (req, res) => {
+  try {
+    // Mark riders as OFFLINE if no location update in 5 minutes
+    const staleThreshold = new Date(Date.now() - 5 * 60 * 1000); // 5 minutes ago
+    
+    const staleUpdate = await prisma.riderProfile.updateMany({
+      where: {
+        status: { in: ['ONLINE', 'BUSY', 'ON_DELIVERY'] },
+        OR: [
+          { lastLocationUpdate: { lt: staleThreshold } },
+          { lastLocationUpdate: null }
+        ]
+      },
+      data: { status: 'OFFLINE' }
+    });
+    
+    if (staleUpdate.count > 0) {
+      console.log(`🔄 [CLEANUP] Set ${staleUpdate.count} stale riders to OFFLINE`);
+    }
+    
+    // Now fetch active riders with recent location
+    const riders = await prisma.riderProfile.findMany({
+      where: {
+        status: { in: ['ONLINE', 'BUSY', 'ON_DELIVERY'] },
+        currentLat: { not: null },
+        currentLng: { not: null },
+        lastLocationUpdate: { gte: staleThreshold }
+      },
+      select: {
+        id: true, userId: true, fullName: true, phone: true,
+        vehicleType: true, vehiclePlate: true, status: true,
+        currentLat: true, currentLng: true, lastLocationUpdate: true, rating: true,
+        user: { select: { firstName: true, lastName: true, phone: true } }
+      },
+      orderBy: { lastLocationUpdate: 'desc' },
+    });
+    
+    console.log(`📍 [LIVEMAP] Returning ${riders.length} active riders`);
+    res.json(riders);
+  } catch (error) {
+    console.error('Error fetching rider locations:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ============================================
 // SYSTEM CONTROL API (Super Admin Only)
 // ============================================
@@ -2989,6 +3036,24 @@ app.post('/api/users/:id/reset-password', authenticateAdmin, async (req, res) =>
   }
 });
 
+
+
+
+// Add this temporary debug endpoint to your server
+app.get('/api/debug/riders', authenticateAdmin, async (req, res) => {
+  const riders = await prisma.riderProfile.findMany({
+    select: {
+      id: true,
+      fullName: true,
+      status: true,
+      currentLat: true,
+      currentLng: true,
+      lastLocationUpdate: true,
+      user: { select: { firstName: true, lastName: true } }
+    }
+  });
+  res.json(riders);
+});
 // ============================================
 // HEALTH CHECK
 // ============================================
